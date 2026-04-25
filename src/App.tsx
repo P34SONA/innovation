@@ -1179,6 +1179,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }
   const [leaveType, setLeaveType] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [search, setSearch] = useState('');
 
   const handleSave = () => {
     if (selectedEmps.length === 0 || (!shiftId && !leaveType) || !startDate || !endDate) {
@@ -1186,6 +1187,15 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }
       return;
     }
     onSave({ selectedEmps, shiftId, leaveType, startDate, endDate });
+  };
+
+  const getConflict = (e: string) => {
+    const found = assignments.find((a: any) => {
+      if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+      if (!a.employees.includes(e)) return false;
+      return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
+    });
+    return found ? found.task : null;
   };
 
   return (
@@ -1237,31 +1247,38 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }
 
            <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">Select Employees</label>
-              <div className="flex flex-wrap gap-2 p-2 border border-[var(--border)] rounded-2xl bg-[var(--bg)] min-h-[120px]">
-                {employees.map((e: string) => {
-                  const conflicted = assignments.some((a: any) => {
-                    if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
-                    if (!a.employees.includes(e)) return false;
-                    return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
-                  });
+              <div className="mb-3">
+                <input 
+                  type="text"
+                  placeholder="Search employees..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 p-2 border border-[var(--border)] rounded-2xl bg-[var(--bg)] min-h-[120px] max-h-48 overflow-y-auto">
+                {employees
+                  .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
+                  .map((e: string) => {
+                    const conflictTask = getConflict(e);
 
-                  return (
-                    <button 
-                      key={e} 
-                      disabled={conflicted}
-                      onClick={() => selectedEmps.includes(e) ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all border ${
-                        selectedEmps.includes(e) 
-                          ? 'bg-[var(--accent)] text-black border-[var(--accent)]' 
-                          : conflicted 
-                            ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
-                            : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
-                      }`}
-                    >
-                      {e} {conflicted && '(Busy)'}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button 
+                        key={e} 
+                        disabled={!!conflictTask}
+                        onClick={() => selectedEmps.includes(e) ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all border ${
+                          selectedEmps.includes(e) 
+                            ? 'bg-[var(--accent)] text-black border-[var(--accent)]' 
+                            : conflictTask 
+                              ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                              : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
+                        }`}
+                      >
+                        {e} {conflictTask && `(${conflictTask})`}
+                      </button>
+                    );
+                  })}
               </div>
            </div>
         </div>
@@ -1277,6 +1294,16 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }
 
 function SelectionModal({ title, date, items, selected: initialSelected, onClose, onSave, assignments }: any) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
+  const [search, setSearch] = useState('');
+
+  const getConflict = (e: string) => {
+    const found = assignments.find((a: any) => {
+      if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+      if (!a.employees.includes(e)) return false;
+      return (date <= a.dutyTo && date >= a.dutyFrom);
+    });
+    return found ? found.task : null;
+  };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -1284,31 +1311,39 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
         <h3 className="font-serif text-2xl mb-1">{title}</h3>
         <p className="text-sm text-[var(--muted)] mb-6">{date}</p>
         
-        <div className="flex flex-wrap gap-2 max-h-[40vh] overflow-y-auto mb-8">
-          {items.map((item: string) => {
-             const conflicted = assignments.some((a: any) => {
-               if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
-               if (!a.employees.includes(item)) return false;
-               return (date <= a.dutyTo && date >= a.dutyFrom);
-             });
+        <div className="mb-4">
+          <input 
+            type="text"
+            placeholder="Search employees..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+          />
+        </div>
 
-             return (
-               <button 
-                 key={item}
-                 disabled={conflicted}
-                 onClick={() => selected.includes(item) ? setSelected(selected.filter(x => x !== item)) : setSelected([...selected, item])}
-                 className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
-                   selected.includes(item) 
-                     ? 'bg-[var(--accent)] text-black border-[var(--accent)] font-bold' 
-                     : conflicted 
-                       ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
-                       : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
-                 }`}
-               >
-                 {item} {conflicted && '(Busy)'}
-               </button>
-             );
-          })}
+        <div className="flex flex-wrap gap-2 max-h-[40vh] overflow-y-auto mb-8">
+          {items
+            .filter((item: string) => item.toLowerCase().includes(search.toLowerCase()))
+            .map((item: string) => {
+              const conflictTask = getConflict(item);
+
+              return (
+                <button 
+                  key={item}
+                  disabled={!!conflictTask}
+                  onClick={() => selected.includes(item) ? setSelected(selected.filter(x => x !== item)) : setSelected([...selected, item])}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                    selected.includes(item) 
+                      ? 'bg-[var(--accent)] text-black border-[var(--accent)] font-bold' 
+                      : conflictTask 
+                        ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                        : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
+                  }`}
+                >
+                  {item} {conflictTask && `(${conflictTask})`}
+                </button>
+              );
+           })}
         </div>
         
         <div className="flex gap-4">
