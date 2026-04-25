@@ -1022,14 +1022,18 @@ function ScheduleView({ data, user, refresh }: any) {
   };
 
   const handleBulkSave = async (params: any) => {
-    const { selectedEmps, shiftId, leaveType, isPayPro, startDate, endDate } = params;
+    const { selectedEmps, shiftId, leaveType, isPayPro, startDate, endDate, weekdays } = params;
     
     // Generate dates
-    const datesInRange: string[] = [];
+    let datesInRange: string[] = [];
     let curr = new Date(startDate);
     const end = new Date(endDate);
     while (curr <= end) {
-      datesInRange.push(curr.toISOString().slice(0, 10));
+      const d = curr.toISOString().slice(0, 10);
+      // Filter by weekdays if provided
+      if (!weekdays || weekdays.includes(curr.getDay())) {
+        datesInRange.push(d);
+      }
       curr.setDate(curr.getDate() + 1);
     }
 
@@ -1196,6 +1200,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('shift');
   const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [search, setSearch] = useState('');
 
   const [year, month] = currentMonth.split('-').map(Number);
@@ -1214,19 +1219,23 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   if (currentWeek.length > 0) weeks.push(currentWeek);
 
   const getActiveDates = () => {
+    if (mode === 'dayoff') {
+      // For Day Off, we target the whole month but only specific weekdays
+      return dates.filter(d => selectedWeekdays.includes(new Date(d).getDay()));
+    }
     if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
     if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
     return weeks[selectedWeekIdx] || [];
   };
 
   const activeDates = getActiveDates();
-  const startDate = activeDates[0];
-  const endDate = activeDates[activeDates.length - 1];
+  const startDate = mode === 'dayoff' ? `${currentMonth}-01` : (activeDates[0] || '');
+  const endDate = mode === 'dayoff' ? `${currentMonth}-${String(daysInMonth).padStart(2, '0')}` : (activeDates[activeDates.length - 1] || '');
 
   // Clear selected employees if they become conflicted in the new period
   useEffect(() => {
     setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
-  }, [periodType, selectedWeekIdx]);
+  }, [periodType, selectedWeekIdx, mode, selectedWeekdays]);
 
   const handleSave = () => {
     if (selectedEmps.length === 0) {
@@ -1237,6 +1246,10 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       alert('Please select a shift type.');
       return;
     }
+    if (mode === 'dayoff' && selectedWeekdays.length === 0) {
+      alert('Please select at least one day of the week.');
+      return;
+    }
     
     onSave({ 
       selectedEmps, 
@@ -1244,35 +1257,41 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       leaveType: mode === 'dayoff' ? 'Dayoff' : (mode === 'paypro' ? '' : ''),
       isPayPro: mode === 'paypro',
       startDate, 
-      endDate 
+      endDate,
+      weekdays: mode === 'dayoff' ? selectedWeekdays : null
     });
   };
 
   const checkConflict = (emp: string) => {
-    // 1. Check assignments (Tasks like SDP/DELTA)
-    const taskBusy = assignments.some((a: any) => {
-      if (!a.employees.includes(emp)) return false;
-      return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
-    });
-    if (taskBusy) return true;
+    // For recursion check, if any day in the activeDates (matching weekdays for month) is busy
+    const busyOnAnyActiveDate = (datesToCheck: string[]) => {
+      // Check assignments
+      const taskBusy = assignments.some((a: any) => {
+        if (!a.employees.includes(emp)) return false;
+        return datesToCheck.some(d => d >= a.dutyFrom && d <= a.dutyTo);
+      });
+      if (taskBusy) return true;
 
-    // 2. Check existing schedule entries in the selected period
-    // The user wants to disable if they are ALREADY assigned in a shift for this period
-    const scheduleBusy = scheduleEntries.some((s: any) => {
-      if (s.employee_name !== emp) return false;
-      return activeDates.includes(s.schedule_date);
-    });
-    if (scheduleBusy) return true;
+      // Check schedule/leave
+      return datesToCheck.some(d => {
+        const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
+        const hasLeave = leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d);
+        return hasShift || hasLeave;
+      });
+    };
 
-    // 3. Check existing leave entries (Day Off, etc.)
-    const leaveBusy = leaveEntries.some((l: any) => {
-      if (l.employee_name !== emp) return false;
-      return activeDates.includes(l.schedule_date);
-    });
-    if (leaveBusy) return true;
-
-    return false;
+    return busyOnAnyActiveDate(activeDates);
   };
+
+  const WEEKDAYS = [
+    { label: 'Mon', value: 1 },
+    { label: 'Tue', value: 2 },
+    { label: 'Wed', value: 3 },
+    { label: 'Thu', value: 4 },
+    { label: 'Fri', value: 5 },
+    { label: 'Sat', value: 6 },
+    { label: 'Sun', value: 0 },
+  ];
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -1311,27 +1330,50 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
         <div className="space-y-8">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">1. Select Period</label>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <button 
-                onClick={() => setPeriodType('p1')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-              >1–15</button>
-              <button 
-                onClick={() => setPeriodType('p2')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-              >16–{daysInMonth}</button>
-              {weeks.map((_, i) => (
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">
+              1. {mode === 'dayoff' ? 'Select Days (Applied for the whole month)' : 'Select Period'}
+            </label>
+            
+            {mode === 'dayoff' ? (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {WEEKDAYS.map(day => (
+                  <button 
+                    key={day.value}
+                    onClick={() => {
+                      setSelectedWeekdays(prev => 
+                        prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
+                      );
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${selectedWeekdays.includes(day.value) ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 mb-4">
                 <button 
-                  key={i}
-                  onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                >Week {i + 1}</button>
-              ))}
-            </div>
+                  onClick={() => setPeriodType('p1')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                >1–15</button>
+                <button 
+                  onClick={() => setPeriodType('p2')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                >16–{daysInMonth}</button>
+                {weeks.map((_, i) => (
+                  <button 
+                    key={i}
+                    onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >Week {i + 1}</button>
+                ))}
+              </div>
+            )}
             
             <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
-              {activeDates.map(d => {
+              {activeDates.length === 0 ? (
+                <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>
+              ) : activeDates.map(d => {
                 const dateNum = Number(d.split('-')[2]);
                 const dayName = DAY_NAMES[new Date(d).getDay()];
                 const isSun = new Date(d).getDay() === 0;
