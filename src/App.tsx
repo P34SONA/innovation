@@ -410,10 +410,16 @@ function AdminView({ data, user, refresh }: any) {
   const [adminName, setAdminName] = useState('');
   const [empName, setEmpName] = useState('');
   const [taskName, setTaskName] = useState('');
+  
   const [assignTask, setAssignTask] = useState('');
   const [dutyFrom, setDutyFrom] = useState(new Date().toISOString().slice(0, 10));
   const [dutyTo, setDutyTo] = useState(new Date().toISOString().slice(0, 10));
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  
+  const [editingAssignment, setEditingAssignment] = useState<any>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
 
   const addAdmin = async () => {
@@ -437,24 +443,86 @@ function AdminView({ data, user, refresh }: any) {
     else { setTaskName(''); refresh(); }
   };
 
-  const doAssign = async () => {
+  const prepareAssign = () => {
     if (!assignTask || !dutyFrom || !dutyTo || selectedEmployees.length === 0) {
       alert('Please fill all fields and select employees');
       return;
     }
-    const { data: res, error } = await getSb().from('assignments').insert({
-      task_name: assignTask,
-      duty_from: dutyFrom,
-      duty_to: dutyTo,
-      added_by: user.name
-    }).select('id').single();
+    setShowConfirmModal(true);
+  };
 
-    if (error) { alert(error.message); return; }
+  const confirmAssign = async () => {
+    setShowConfirmModal(false);
+    
+    if (editingAssignment) {
+      // Update existing assignment
+      const { error } = await getSb().from('assignments').update({
+        task_name: assignTask,
+        duty_from: dutyFrom,
+        duty_to: dutyTo
+      }).eq('id', editingAssignment.id);
 
-    const rows = selectedEmployees.map(e => ({ assignment_id: res.id, employee_name: e }));
-    const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
-    if (e2) alert(e2.message);
-    else { setSelectedEmployees([]); refresh(); }
+      if (error) { alert(error.message); return; }
+
+      // Update employees (delete then re-insert is simplest)
+      await getSb().from('assignment_employees').delete().eq('assignment_id', editingAssignment.id);
+      const rows = selectedEmployees.map(e => ({ assignment_id: editingAssignment.id, employee_name: e }));
+      const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
+      
+      if (e2) alert(e2.message);
+      else { 
+        setEditingAssignment(null);
+        resetForm();
+        refresh(); 
+      }
+    } else {
+      // Create new assignment
+      const { data: res, error } = await getSb().from('assignments').insert({
+        task_name: assignTask,
+        duty_from: dutyFrom,
+        duty_to: dutyTo,
+        added_by: user.name
+      }).select('id').single();
+
+      if (error) { alert(error.message); return; }
+
+      const rows = selectedEmployees.map(e => ({ assignment_id: res.id, employee_name: e }));
+      const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
+      if (e2) alert(e2.message);
+      else { 
+        resetForm();
+        refresh(); 
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setAssignTask('');
+    setDutyFrom(new Date().toISOString().slice(0, 10));
+    setDutyTo(new Date().toISOString().slice(0, 10));
+    setSelectedEmployees([]);
+    setEditingAssignment(null);
+  };
+
+  const handleEdit = (a: any) => {
+    setEditingAssignment(a);
+    setAssignTask(a.task);
+    setDutyFrom(a.dutyFrom);
+    setDutyTo(a.dutyTo);
+    setSelectedEmployees(a.employees);
+    // Scroll to top of assignment section if needed
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getConflictedTask = (e: string) => {
+    if (assignTask === 'GCASH' || assignTask === 'ELOAD') return null;
+    const found = data.assignments.find((a: any) => {
+      if (editingAssignment && a.id === editingAssignment.id) return false;
+      if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+      if (!a.employees.includes(e)) return false;
+      return (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
+    });
+    return found ? found.task : null;
   };
 
   const filteredHistory = data.assignments.filter((a: any) => {
@@ -525,8 +593,22 @@ function AdminView({ data, user, refresh }: any) {
       </div>
 
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 sm:p-8">
-        <h2 className="font-serif text-2xl mb-1">Assign Task</h2>
-        <p className="text-sm text-[var(--muted)] mb-6">Create a new task assignment for a group of employees.</p>
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="font-serif text-2xl mb-1">{editingAssignment ? 'Edit Assignment' : 'Assign Task'}</h2>
+            <p className="text-sm text-[var(--muted)]">
+              {editingAssignment ? `Modifying assignment for ${editingAssignment.task}` : 'Create a new task assignment for a group of employees.'}
+            </p>
+          </div>
+          {editingAssignment && (
+            <button 
+              onClick={resetForm}
+              className="text-xs font-bold text-[var(--red)] border border-[var(--red)]/30 bg-[var(--red)]/5 px-4 py-2 rounded-xl hover:bg-[var(--red)]/10"
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="space-y-4">
@@ -552,42 +634,94 @@ function AdminView({ data, user, refresh }: any) {
             </div>
           </div>
           
-          <div>
+          <div className="flex flex-col">
             <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Select Employees</label>
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-xl bg-[var(--bg)]">
-              {data.employees.map((e: string) => {
-                const conflicted = (() => {
-                  if (assignTask === 'GCASH' || assignTask === 'ELOAD') return false;
-                  return data.assignments.some((a: any) => {
-                    if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
-                    if (!a.employees.includes(e)) return false;
-                    return (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
-                  });
-                })();
+            <div className="mb-3">
+              <input 
+                type="text"
+                placeholder="Search employees..."
+                value={employeeSearch}
+                onChange={e => setEmployeeSearch(e.target.value)}
+                className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-xl bg-[var(--bg)] flex-1">
+              {data.employees
+                .filter((e: string) => e.toLowerCase().includes(employeeSearch.toLowerCase()))
+                .map((e: string) => {
+                  const conflict = getConflictedTask(e);
 
-                return (
-                  <button 
-                    key={e} 
-                    disabled={conflicted}
-                    onClick={() => selectedEmployees.includes(e) ? setSelectedEmployees(selectedEmployees.filter(x => x !== e)) : setSelectedEmployees([...selectedEmployees, e])}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                      selectedEmployees.includes(e) 
-                        ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' 
-                        : conflicted 
-                          ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
-                          : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
-                    }`}
-                  >
-                    {e} {conflicted && '(Busy)'}
-                  </button>
-                );
-              })}
+                  return (
+                    <button 
+                      key={e} 
+                      disabled={!!conflict}
+                      onClick={() => selectedEmployees.includes(e) ? setSelectedEmployees(selectedEmployees.filter(x => x !== e)) : setSelectedEmployees([...selectedEmployees, e])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                        selectedEmployees.includes(e) 
+                          ? 'bg-[var(--accent)] text-black border-[var(--accent)]' 
+                          : conflict 
+                            ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                            : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
+                      }`}
+                    >
+                      {e} {conflict && `(${conflict})`}
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>
         
-        <button onClick={doAssign} className="w-full bg-[var(--accent)] text-black py-4 rounded-xl font-bold hover:bg-[#f0d060] transition-colors">Assign Employees</button>
+        <button 
+          onClick={prepareAssign} 
+          className="w-full bg-[var(--accent)] text-black py-4 rounded-xl font-bold hover:bg-[#f0d060] transition-colors"
+        >
+          {editingAssignment ? 'Update Assignment' : 'Assign Employees'}
+        </button>
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 className="font-serif text-2xl mb-2">Confirm Assignment</h3>
+            <p className="text-sm text-[var(--muted)] mb-8">
+              Are you sure you want to {editingAssignment ? 'update this' : 'create this new'} assignment?
+            </p>
+            
+            <div className="bg-[var(--bg)] p-4 rounded-2xl border border-[var(--border)] mb-8 space-y-3">
+              <div className="flex justify-between text-xs">
+                <span className="text-[var(--muted)]">Task:</span>
+                <span className="font-bold text-[var(--accent)]">{assignTask}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[var(--muted)]">Period:</span>
+                <span className="font-mono">{dutyFrom} to {dutyTo}</span>
+              </div>
+              <div className="flex justify-between text-xs items-start">
+                <span className="text-[var(--muted)]">Team:</span>
+                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                   {selectedEmployees.map(e => <span key={e} className="bg-[var(--surface2)] px-2 py-0.5 rounded-lg border border-[var(--border)] text-[10px]">{e}</span>)}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 bg-[var(--surface2)] border border-[var(--border)] py-3 rounded-xl text-sm font-bold hover:border-[var(--muted)]"
+              >
+                Back
+              </button>
+              <button 
+                onClick={confirmAssign}
+                className="flex-1 bg-[var(--accent)] text-black py-3 rounded-xl text-sm font-bold shadow-lg shadow-[var(--accent)]/20"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -617,16 +751,17 @@ function AdminView({ data, user, refresh }: any) {
         <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[var(--surface2)] text-[10px] uppercase tracking-wider font-bold text-[var(--muted)]">
-                <th className="px-6 py-4">Task</th>
+              <tr className="bg-[var(--surface2)] text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] border-b border-[var(--border)]">
+                <th className="px-6 py-4 w-40">Task</th>
                 <th className="px-6 py-4">Duty Period</th>
                 <th className="px-6 py-4">Employees</th>
-                <th className="px-6 py-4">Assigned By</th>
+                <th className="px-6 py-4 w-32">Assigned By</th>
+                <th className="px-6 py-4 w-20"></th>
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-[var(--border)]">
               {filteredHistory.map((a: any) => (
-                <tr key={a.id} className="hover:bg-white/[0.02]">
+                <tr key={a.id} className="hover:bg-white/[0.02] group">
                   <td className="px-6 py-4 font-bold">{a.task}</td>
                   <td className="px-6 py-4 font-mono text-[11px] text-[var(--muted)]">{a.dutyFrom} → {a.dutyTo}</td>
                   <td className="px-6 py-4">
@@ -635,6 +770,14 @@ function AdminView({ data, user, refresh }: any) {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[11px] text-[var(--accent)] font-mono">{a.addedBy}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => handleEdit(a)}
+                      className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Settings size={16} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
