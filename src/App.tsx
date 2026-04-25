@@ -1287,6 +1287,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [search, setSearch] = useState('');
+  const [excludedDates, setExcludedDates] = useState<string[]>([]);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -1308,9 +1309,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       // For Day Off, we target the whole month but only specific weekdays
       return dates.filter(d => selectedWeekdays.includes(new Date(d + 'T00:00:00').getDay()));
     }
-    if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
-    if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
-    return weeks[selectedWeekIdx] || [];
+    let baseDates: string[] = [];
+    if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
+    else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
+    else baseDates = weeks[selectedWeekIdx] || [];
+    
+    return baseDates.filter(d => !excludedDates.includes(d));
   };
 
   const activeDates = getActiveDates();
@@ -1335,7 +1339,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     } else {
       setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
     }
-  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length]);
+  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length, excludedDates]);
+
+  // Reset excluded dates when period or mode changes
+  useEffect(() => {
+    setExcludedDates([]);
+  }, [mode, periodType, selectedWeekIdx]);
 
   const handleSave = () => {
     if (selectedEmps.length === 0) {
@@ -1496,20 +1505,45 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                 </div>
                 
                 <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
-                  {activeDates.length === 0 ? (
-                    <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>
-                  ) : activeDates.map(d => {
-                    const dateNum = Number(d.split('-')[2]);
-                    const dayName = DAY_NAMES[new Date(d).getDay()];
-                    const isSun = new Date(d).getDay() === 0;
-                    const isSat = new Date(d).getDay() === 6;
-                    return (
-                      <div key={d} className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold ${isSun ? 'border-red-500/30 bg-red-500/5 text-red-400' : isSat ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' : 'border-gray-700 bg-gray-800/40 text-gray-400'}`}>
-                        <span className="opacity-60">{dayName}</span>
-                        <span className="text-xs">{dateNum}</span>
-                      </div>
-                    );
-                  })}
+                  {(() => {
+                    let baseDates: string[] = [];
+                    if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
+                    else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
+                    else baseDates = weeks[selectedWeekIdx] || [];
+
+                    if (baseDates.length === 0) return <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>;
+                    
+                    return baseDates.map(d => {
+                      const dateNum = Number(d.split('-')[2]);
+                      const dayName = DAY_NAMES[new Date(d + 'T00:00:00').getDay()];
+                      const isSun = new Date(d + 'T00:00:00').getDay() === 0;
+                      const isSat = new Date(d + 'T00:00:00').getDay() === 6;
+                      const isExcluded = excludedDates.includes(d);
+                      
+                      return (
+                        <button 
+                          key={d} 
+                          onClick={() => {
+                            setExcludedDates(prev => 
+                              prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+                            );
+                          }}
+                          className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${
+                            isExcluded 
+                              ? 'border-gray-800 bg-gray-900/50 text-gray-700 opacity-40 shadow-inner' 
+                              : isSun 
+                                ? 'border-red-500/30 bg-red-500/5 text-red-400 hover:border-red-500/50' 
+                                : isSat 
+                                  ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400 hover:border-cyan-500/50' 
+                                  : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600 hover:bg-gray-800/60'
+                          }`}
+                        >
+                          <span className="opacity-60">{dayName}</span>
+                          <span className="text-xs">{dateNum}</span>
+                        </button>
+                      );
+                    });
+                  })()}
                 </div>
               </>
             )}
