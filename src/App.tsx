@@ -476,6 +476,7 @@ function AdminView({ data, user, refresh }: any) {
           <div className="flex gap-2">
             <input 
               value={adminName} onChange={e => setAdminName(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && addAdmin()}
               placeholder="New admin..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
             />
             <button onClick={addAdmin} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
@@ -494,6 +495,7 @@ function AdminView({ data, user, refresh }: any) {
           <div className="flex gap-2">
             <input 
               value={empName} onChange={e => setEmpName(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && addEmployee()}
               placeholder="New employee..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
             />
             <button onClick={addEmployee} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
@@ -509,6 +511,7 @@ function AdminView({ data, user, refresh }: any) {
           <div className="flex gap-2">
             <input 
               value={taskName} onChange={e => setTaskName(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && addTaskType()}
               placeholder="Task name..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
             />
             <button onClick={addTaskType} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
@@ -869,7 +872,7 @@ function ScheduleView({ data, user, refresh }: any) {
                     ))}
                   </tr>
                   <tr className="bg-[var(--surface)]">
-                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[#c084fc]">On Leave</td>
+                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[#c084fc]">Pre-Approved Leave</td>
                     {week.map(d => (
                       <td key={d} className="p-1 border-r border-[var(--border)] group relative">
                          <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">

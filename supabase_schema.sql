@@ -52,9 +52,10 @@ CREATE TABLE IF NOT EXISTS shift_types (
 
 -- Seed Shift Types
 INSERT INTO shift_types (name, sort_order) VALUES 
-('Graveyard Shift', 1),
-('6-3 Shift', 2),
-('PayPro & Batch Upload', 3)
+('6:00 AM - 3:00 PM Shift', 1),
+('8:00 AM - 5:00 PM Shift', 2),
+('10:00 PM - 6:00 AM Shift', 3),
+('PayPro & Batch Upload', 4)
 ON CONFLICT (name) DO NOTHING;
 
 -- 7. Schedule Entries (Shifts)
