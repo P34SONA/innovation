@@ -120,6 +120,18 @@ ALTER TABLE leave_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE soft_skills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 
+-- Drop existings policies if they exist (to allow re-running the script)
+DROP POLICY IF EXISTS "Enable all access for all users" ON admins;
+DROP POLICY IF EXISTS "Enable all access for all users" ON employees;
+DROP POLICY IF EXISTS "Enable all access for all users" ON tasks;
+DROP POLICY IF EXISTS "Enable all access for all users" ON assignments;
+DROP POLICY IF EXISTS "Enable all access for all users" ON assignment_employees;
+DROP POLICY IF EXISTS "Enable all access for all users" ON shift_types;
+DROP POLICY IF EXISTS "Enable all access for all users" ON schedule_entries;
+DROP POLICY IF EXISTS "Enable all access for all users" ON leave_entries;
+DROP POLICY IF EXISTS "Enable all access for all users" ON soft_skills;
+DROP POLICY IF EXISTS "Enable all access for all users" ON notes;
+
 -- Creating a single common policy for shared usage (as per app logic)
 CREATE POLICY "Enable all access for all users" ON admins FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON employees FOR ALL USING (true) WITH CHECK (true);
