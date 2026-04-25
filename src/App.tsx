@@ -211,7 +211,7 @@ export default function App() {
               label="Skills" 
             />
           )}
-          {!user.isGuest && (
+          {user.isAdmin && (
             <TabButton 
               active={activeTab === 'notes'} 
               onClick={() => setActiveTab('notes')} 
@@ -812,7 +812,18 @@ function AdminView({ data, user, refresh }: any) {
                   <td className="px-6 py-4 font-mono text-[11px] text-[var(--muted)]">{a.dutyFrom} → {a.dutyTo}</td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1.5">
-                      {a.employees.map((e: string) => <span key={e} className="bg-[var(--purple)]/10 text-[var(--purple)] border border-[var(--purple)]/30 px-2 py-0.5 rounded-full text-[10px]">{e}</span>)}
+                      {a.employees.map((e: string) => (
+                        <span 
+                          key={e} 
+                          className={`px-2 py-0.5 rounded-full text-[10px] border ${
+                            a.task === 'SDP' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                            a.task === 'DELTA' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' :
+                            'bg-[var(--purple)]/10 text-[var(--purple)] border border-[var(--purple)]/30'
+                          }`}
+                        >
+                          {e}
+                        </span>
+                      ))}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[11px] text-[var(--accent)] font-mono">{a.addedBy}</td>
