@@ -1318,17 +1318,18 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   };
 
   const checkConflict = (emp: string) => {
-    // For recursion check, if any day in the activeDates (matching weekdays for month) is busy
-    const busyOnAnyActiveDate = (datesToCheck: string[]) => {
-      // User requested: "do not disable the names of the employees who's assigned in task tasks will not affect in setting up the schedule"
-      // So we skip checking `assignments` (SDP/DELTA) and only check existing schedule/leaves.
+    if (mode === 'dayoff') {
+      // If any Dayoff exists for this employee in the entire month, disable them.
+      return leaveEntries.some((l: any) => 
+        l.employee_name === emp && 
+        l.leave_type === 'Dayoff' && 
+        l.schedule_date.startsWith(currentMonth)
+      );
+    }
 
-      // Check schedule/leave
+    // For other modes, check if any day in the activeDates (matching selection) is busy
+    const busyOnAnyActiveDate = (datesToCheck: string[]) => {
       return datesToCheck.some(d => {
-        if (mode === 'dayoff') {
-          // For Day Off, we override shifts, so only existing leaves (especially Dayoff) cause "conflict" (disabling)
-          return leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff');
-        }
         const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
         const hasLeave = leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d);
         return hasShift || hasLeave;
@@ -1495,7 +1496,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar">
+            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar rounded-2xl transition-colors ${mode === 'dayoff' ? 'bg-pink-500/5 border border-pink-500/10' : ''}`}>
               {employees
                 .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
                 .sort()
@@ -1510,9 +1511,9 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
                       className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
                         isSelected 
-                          ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
+                          ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
                           : isAssigned 
-                            ? 'bg-red-500/5 border-red-500/20 text-red-500/40 cursor-not-allowed opacity-50'
+                            ? 'bg-red-500/5 border-red-500/10 text-red-500/20 cursor-not-allowed opacity-40'
                             : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
                       }`}
                     >
