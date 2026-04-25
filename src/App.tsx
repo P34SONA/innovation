@@ -1052,10 +1052,14 @@ function ScheduleView({ data, user, refresh }: any) {
       })));
       await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
     } else if (leaveType) {
+      if (leaveType === 'Dayoff') {
+        // Overrides: delete existing shifts for these employees and dates
+        await getSb().from('schedule_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange);
+      }
       const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
         schedule_date: d, employee_name: emp, leave_type: leaveType, added_by: user.name
       })));
-      await getSb().from('leave_entries').upsert(rows, { onConflict: 'schedule_date,employee_name,leave_type' });
+      await getSb().from('leave_entries').upsert(rows, { onConflict: 'schedule_date,employee_name' });
     }
 
     setShowBulkModal(false);
@@ -1197,7 +1201,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
   const [shiftId, setShiftId] = useState<number | string>('');
   const [leaveType, setLeaveType] = useState('Dayoff');
-  const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('shift');
+  const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('dayoff');
   const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
@@ -1270,6 +1274,10 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
       // Check schedule/leave
       return datesToCheck.some(d => {
+        if (mode === 'dayoff') {
+          // For Day Off, we override shifts, so only existing leaves (especially Dayoff) cause "conflict" (disabling)
+          return leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff');
+        }
         const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
         const hasLeave = leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d);
         return hasShift || hasLeave;
@@ -1277,6 +1285,17 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     };
 
     return busyOnAnyActiveDate(activeDates);
+  };
+
+  const isWeekDayDisabled = (dayValue: number) => {
+    if (selectedEmps.length === 0) return false;
+    const weekdayDates = dates.filter(d => new Date(d).getDay() === dayValue);
+    // Disable if ALL selected employees already have "Dayoff" on ALL these weekdays in the month
+    return selectedEmps.every(emp => 
+      weekdayDates.every(d => 
+        leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff')
+      )
+    );
   };
 
   const WEEKDAYS = [
@@ -1332,19 +1351,29 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
             
             {mode === 'dayoff' ? (
               <div className="flex flex-wrap gap-2">
-                {WEEKDAYS.map(day => (
-                  <button 
-                    key={day.value}
-                    onClick={() => {
-                      setSelectedWeekdays(prev => 
-                        prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
-                      );
-                    }}
-                    className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all flex-1 min-w-[80px] ${selectedWeekdays.includes(day.value) ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                  >
-                    {day.label}
-                  </button>
-                ))}
+                {WEEKDAYS.map(day => {
+                  const isDisabled = isWeekDayDisabled(day.value);
+                  return (
+                    <button 
+                      key={day.value}
+                      disabled={isDisabled}
+                      onClick={() => {
+                        setSelectedWeekdays(prev => 
+                          prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
+                        );
+                      }}
+                      className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all flex-1 min-w-[80px] ${
+                        selectedWeekdays.includes(day.value) 
+                          ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' 
+                          : isDisabled
+                            ? 'bg-red-500/5 border-red-500/10 text-red-500/30 cursor-not-allowed opacity-50'
+                            : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <>
