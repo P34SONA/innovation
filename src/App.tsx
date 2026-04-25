@@ -419,6 +419,7 @@ function AdminView({ data, user, refresh }: any) {
   
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [autoRotate, setAutoRotate] = useState(false);
 
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
 
@@ -488,8 +489,33 @@ function AdminView({ data, user, refresh }: any) {
 
       const rows = selectedEmployees.map(e => ({ assignment_id: res.id, employee_name: e }));
       const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
-      if (e2) alert(e2.message);
-      else { 
+      
+      if (e2) {
+        alert(e2.message);
+      } else {
+        // Automation: If SDP or DELTA and autoRotate is checked, create next day assignment
+        if (autoRotate && (assignTask === 'SDP' || assignTask === 'DELTA')) {
+          const nextTask = assignTask === 'SDP' ? 'DELTA' : 'SDP';
+          const nextFrom = new Date(dutyTo);
+          nextFrom.setDate(nextFrom.getDate() + 1);
+          const nextTo = new Date(nextFrom);
+          
+          const nextFromStr = nextFrom.toISOString().slice(0, 10);
+          const nextToStr = nextTo.toISOString().slice(0, 10);
+
+          const { data: nextRes, error: nextErr } = await getSb().from('assignments').insert({
+            task_name: nextTask,
+            duty_from: nextFromStr,
+            duty_to: nextToStr,
+            added_by: `${user.name} (Auto)`
+          }).select('id').single();
+
+          if (!nextErr) {
+            const nextRows = selectedEmployees.map(e => ({ assignment_id: nextRes.id, employee_name: e }));
+            await getSb().from('assignment_employees').insert(nextRows);
+          }
+        }
+
         resetForm();
         refresh(); 
       }
@@ -622,6 +648,20 @@ function AdminView({ data, user, refresh }: any) {
                 {data.tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
+            {(assignTask === 'SDP' || assignTask === 'DELTA') && (
+              <div className="flex items-center gap-2 px-1">
+                <input 
+                  type="checkbox" 
+                  id="autoRotate" 
+                  checked={autoRotate} 
+                  onChange={e => setAutoRotate(e.target.checked)}
+                  className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg)] text-[var(--accent)]"
+                />
+                <label htmlFor="autoRotate" className="text-xs text-[var(--muted)] hover:text-[var(--text)] cursor-pointer select-none">
+                  Auto-rotate to {assignTask === 'SDP' ? 'DELTA' : 'SDP'} on the next day
+                </label>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty From</label>
@@ -762,7 +802,13 @@ function AdminView({ data, user, refresh }: any) {
             <tbody className="text-sm divide-y divide-[var(--border)]">
               {filteredHistory.map((a: any) => (
                 <tr key={a.id} className="hover:bg-white/[0.02] group">
-                  <td className="px-6 py-4 font-bold">{a.task}</td>
+                  <td className="px-6 py-4 font-bold">
+                    <span className={`px-2 py-1 rounded-md ${
+                      a.task === 'SDP' ? 'text-emerald-400 bg-emerald-500/5' :
+                      a.task === 'DELTA' ? 'text-cyan-400 bg-cyan-500/5' :
+                      ''
+                    }`}>{a.task}</span>
+                  </td>
                   <td className="px-6 py-4 font-mono text-[11px] text-[var(--muted)]">{a.dutyFrom} → {a.dutyTo}</td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1.5">
@@ -857,7 +903,11 @@ function TaskView({ data, user }: any) {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <span className="text-[9px] font-bold uppercase tracking-widest bg-[var(--purple)]/10 text-[var(--purple)] border border-[var(--purple)]/30 px-2 py-0.5 rounded-full">{a.task}</span>
+                    <span className={`text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded-full ${
+                      a.task === 'SDP' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                      a.task === 'DELTA' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' :
+                      'bg-[var(--purple)]/10 text-[var(--purple)] border border-[var(--purple)]/30'
+                    }`}>{a.task}</span>
                     {isMe && <span className="text-[9px] font-bold uppercase tracking-widest bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 px-2 py-0.5 rounded-full">Your Task ✓</span>}
                   </div>
                 </div>
