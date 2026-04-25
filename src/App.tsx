@@ -1265,12 +1265,8 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const checkConflict = (emp: string) => {
     // For recursion check, if any day in the activeDates (matching weekdays for month) is busy
     const busyOnAnyActiveDate = (datesToCheck: string[]) => {
-      // Check assignments
-      const taskBusy = assignments.some((a: any) => {
-        if (!a.employees.includes(emp)) return false;
-        return datesToCheck.some(d => d >= a.dutyFrom && d <= a.dutyTo);
-      });
-      if (taskBusy) return true;
+      // User requested: "do not disable the names of the employees who's assigned in task tasks will not affect in setting up the schedule"
+      // So we skip checking `assignments` (SDP/DELTA) and only check existing schedule/leaves.
 
       // Check schedule/leave
       return datesToCheck.some(d => {
@@ -1331,11 +1327,11 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
         <div className="space-y-8">
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">
-              1. {mode === 'dayoff' ? 'Select Days (Applied for the whole month)' : 'Select Period'}
+              1. {mode === 'dayoff' ? 'Select Days (Mon-Sun)' : 'Select Period'}
             </label>
             
             {mode === 'dayoff' ? (
-              <div className="flex flex-wrap gap-2 mb-4">
+              <div className="flex flex-wrap gap-2">
                 {WEEKDAYS.map(day => (
                   <button 
                     key={day.value}
@@ -1344,48 +1340,50 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                         prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
                       );
                     }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${selectedWeekdays.includes(day.value) ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all flex-1 min-w-[80px] ${selectedWeekdays.includes(day.value) ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >
                     {day.label}
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2 mb-4">
-                <button 
-                  onClick={() => setPeriodType('p1')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                >1–15</button>
-                <button 
-                  onClick={() => setPeriodType('p2')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                >16–{daysInMonth}</button>
-                {weeks.map((_, i) => (
+              <>
+                <div className="flex flex-wrap gap-2 mb-4">
                   <button 
-                    key={i}
-                    onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                  >Week {i + 1}</button>
-                ))}
-              </div>
+                    onClick={() => setPeriodType('p1')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >1–15</button>
+                  <button 
+                    onClick={() => setPeriodType('p2')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >16–{daysInMonth}</button>
+                  {weeks.map((_, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    >Week {i + 1}</button>
+                  ))}
+                </div>
+                
+                <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
+                  {activeDates.length === 0 ? (
+                    <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>
+                  ) : activeDates.map(d => {
+                    const dateNum = Number(d.split('-')[2]);
+                    const dayName = DAY_NAMES[new Date(d).getDay()];
+                    const isSun = new Date(d).getDay() === 0;
+                    const isSat = new Date(d).getDay() === 6;
+                    return (
+                      <div key={d} className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold ${isSun ? 'border-red-500/30 bg-red-500/5 text-red-400' : isSat ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' : 'border-gray-700 bg-gray-800/40 text-gray-400'}`}>
+                        <span className="opacity-60">{dayName}</span>
+                        <span className="text-xs">{dateNum}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
-            
-            <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
-              {activeDates.length === 0 ? (
-                <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>
-              ) : activeDates.map(d => {
-                const dateNum = Number(d.split('-')[2]);
-                const dayName = DAY_NAMES[new Date(d).getDay()];
-                const isSun = new Date(d).getDay() === 0;
-                const isSat = new Date(d).getDay() === 6;
-                return (
-                  <div key={d} className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold ${isSun ? 'border-red-500/30 bg-red-500/5 text-red-400' : isSat ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' : 'border-gray-700 bg-gray-800/40 text-gray-400'}`}>
-                    <span className="opacity-60">{dayName}</span>
-                    <span className="text-xs">{dateNum}</span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
           {mode === 'shift' && (
