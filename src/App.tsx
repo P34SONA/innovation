@@ -14,7 +14,11 @@ import {
   ChevronLeft, 
   ChevronRight,
   Info,
-  Archive
+  Archive,
+  Clock,
+  Zap,
+  Moon,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -222,7 +226,7 @@ export default function App() {
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl p-4 sm:p-8">
+      <main className={`mx-auto p-4 sm:p-8 ${activeTab === 'schedule' ? 'max-w-full' : 'max-w-7xl'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -1018,7 +1022,7 @@ function ScheduleView({ data, user, refresh }: any) {
   };
 
   const handleBulkSave = async (params: any) => {
-    const { selectedEmps, shiftId, leaveType, startDate, endDate } = params;
+    const { selectedEmps, shiftId, leaveType, isPayPro, startDate, endDate } = params;
     
     // Generate dates
     const datesInRange: string[] = [];
@@ -1029,7 +1033,16 @@ function ScheduleView({ data, user, refresh }: any) {
       curr.setDate(curr.getDate() + 1);
     }
 
-    if (shiftId) {
+    if (isPayPro) {
+      // Find the PayPro shift type id
+      const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
+      if (payProType) {
+        const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
+          schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
+        })));
+        await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+      }
+    } else if (shiftId) {
       const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
         schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
       })));
@@ -1167,125 +1180,246 @@ function ScheduleView({ data, user, refresh }: any) {
           onClose={() => setShowBulkModal(false)}
           onSave={handleBulkSave}
           assignments={data.assignments}
+          scheduleEntries={data.scheduleEntries}
+          leaveEntries={data.leaveEntries}
+          currentMonth={currentMonth}
         />
       )}
     </div>
   );
 }
 
-function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }: any) {
+function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, scheduleEntries, leaveEntries, currentMonth }: any) {
   const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
   const [shiftId, setShiftId] = useState<number | string>('');
-  const [leaveType, setLeaveType] = useState('');
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveType, setLeaveType] = useState('Dayoff');
+  const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('shift');
+  const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
+  const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [search, setSearch] = useState('');
 
-  const handleSave = () => {
-    if (selectedEmps.length === 0 || (!shiftId && !leaveType) || !startDate || !endDate) {
-      alert('Please select employees, a shift/leave type, and a date range.');
-      return;
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const dates = Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`);
+  const weeks: string[][] = [];
+  let currentWeek: string[] = [];
+  dates.forEach(d => {
+    currentWeek.push(d);
+    if (new Date(d).getDay() === 0) {
+      weeks.push(currentWeek);
+      currentWeek = [];
     }
-    onSave({ selectedEmps, shiftId, leaveType, startDate, endDate });
+  });
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+
+  const getActiveDates = () => {
+    if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
+    if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
+    return weeks[selectedWeekIdx] || [];
   };
 
-  const getConflict = (e: string) => {
-    const found = assignments.find((a: any) => {
-      if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
-      if (!a.employees.includes(e)) return false;
+  const activeDates = getActiveDates();
+  const startDate = activeDates[0];
+  const endDate = activeDates[activeDates.length - 1];
+
+  // Clear selected employees if they become conflicted in the new period
+  useEffect(() => {
+    setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
+  }, [periodType, selectedWeekIdx]);
+
+  const handleSave = () => {
+    if (selectedEmps.length === 0) {
+      alert('Please select employees.');
+      return;
+    }
+    if (mode === 'shift' && !shiftId) {
+      alert('Please select a shift type.');
+      return;
+    }
+    
+    onSave({ 
+      selectedEmps, 
+      shiftId: mode === 'shift' ? shiftId : '', 
+      leaveType: mode === 'dayoff' ? 'Dayoff' : (mode === 'paypro' ? '' : ''),
+      isPayPro: mode === 'paypro',
+      startDate, 
+      endDate 
+    });
+  };
+
+  const checkConflict = (emp: string) => {
+    // 1. Check assignments (Tasks like SDP/DELTA)
+    const taskBusy = assignments.some((a: any) => {
+      if (!a.employees.includes(emp)) return false;
       return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
     });
-    return found ? found.task : null;
+    if (taskBusy) return true;
+
+    // 2. Check existing schedule entries in the selected period
+    // The user wants to disable if they are ALREADY assigned in a shift for this period
+    const scheduleBusy = scheduleEntries.some((s: any) => {
+      if (s.employee_name !== emp) return false;
+      return activeDates.includes(s.schedule_date);
+    });
+    if (scheduleBusy) return true;
+
+    // 3. Check existing leave entries (Day Off, etc.)
+    const leaveBusy = leaveEntries.some((l: any) => {
+      if (l.employee_name !== emp) return false;
+      return activeDates.includes(l.schedule_date);
+    });
+    if (leaveBusy) return true;
+
+    return false;
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
-        <h3 className="font-serif text-2xl mb-1">Bulk Assign Schedule</h3>
-        <p className="text-sm text-[var(--muted)] mb-6">Assign multiple employees to a shift or leave for a specific date range.</p>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-[#1a1d24] border border-[#2d3139] rounded-[32px] p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[95vh] relative">
+        <button onClick={onClose} className="absolute right-6 top-6 text-gray-500 hover:text-white"><X size={24} /></button>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-           <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">From</label>
-                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none" />
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">To</label>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none" />
-                 </div>
-              </div>
+        <div className="flex items-center gap-3 mb-2">
+          <Users size={24} className="text-[var(--accent)]" />
+          <h3 className="font-serif text-3xl">Bulk Assign</h3>
+        </div>
+        <p className="text-sm text-gray-400 mb-8">Assign employees to a shift — select a period and specific days.</p>
 
-              <div>
-                 <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">Assign As</label>
-                 <select 
-                   value={shiftId || leaveType} 
-                   onChange={e => {
-                     const val = e.target.value;
-                     if (['Dayoff', 'Pre Approved Leave'].includes(val)) {
-                       setLeaveType(val);
-                       setShiftId('');
-                     } else {
-                       setShiftId(Number(val));
-                       setLeaveType('');
-                     }
-                   }}
-                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
-                 >
-                    <option value="">Select Shift or Leave...</option>
-                    <optgroup label="Shifts">
-                       {shiftTypes.map((st: any) => <option key={st.id} value={st.id}>{st.name}</option>)}
-                    </optgroup>
-                    <optgroup label="Leaves">
-                       <option value="Dayoff">Day Off</option>
-                       <option value="Pre Approved Leave">Pre-Approved Leave</option>
-                    </optgroup>
-                 </select>
-              </div>
-           </div>
+        <div className="grid grid-cols-3 gap-3 mb-8">
+          <button 
+            onClick={() => setMode('shift')}
+            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'shift' ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+          >
+            <Clock size={20} className="mb-2" />
+            <span className="text-xs font-bold uppercase tracking-widest">Shift</span>
+          </button>
+          <button 
+            onClick={() => setMode('paypro')}
+            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'paypro' ? 'bg-orange-500/10 border-orange-500 text-orange-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+          >
+            <Zap size={20} className="mb-2" />
+            <span className="text-center text-[10px] font-bold uppercase tracking-tight leading-tight">PayPro & Batch<br/>Upload</span>
+          </button>
+          <button 
+            onClick={() => setMode('dayoff')}
+            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'dayoff' ? 'bg-pink-500/10 border-pink-500 text-pink-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+          >
+            <Moon size={20} className="mb-2" />
+            <span className="text-xs font-bold uppercase tracking-widest">Day Off</span>
+          </button>
+        </div>
 
-           <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">Select Employees</label>
-              <div className="mb-3">
+        <div className="space-y-8">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">1. Select Period</label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button 
+                onClick={() => setPeriodType('p1')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >1–15</button>
+              <button 
+                onClick={() => setPeriodType('p2')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >16–{daysInMonth}</button>
+              {weeks.map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                >Week {i + 1}</button>
+              ))}
+            </div>
+            
+            <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
+              {activeDates.map(d => {
+                const dateNum = Number(d.split('-')[2]);
+                const dayName = DAY_NAMES[new Date(d).getDay()];
+                const isSun = new Date(d).getDay() === 0;
+                const isSat = new Date(d).getDay() === 6;
+                return (
+                  <div key={d} className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold ${isSun ? 'border-red-500/30 bg-red-500/5 text-red-400' : isSat ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' : 'border-gray-700 bg-gray-800/40 text-gray-400'}`}>
+                    <span className="opacity-60">{dayName}</span>
+                    <span className="text-xs">{dateNum}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {mode === 'shift' && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">2. Shift Type</label>
+              <select 
+                value={shiftId} 
+                onChange={e => setShiftId(e.target.value)}
+                className="w-full bg-[#0d0f14] border border-gray-700 rounded-2xl px-5 py-4 text-sm outline-none focus:border-[var(--accent)] shadow-inner transition-colors"
+              >
+                <option value="">— Choose shift —</option>
+                {shiftTypes.filter((st:any) => st.name !== 'PayPro & Batch Upload').map((st: any) => (
+                  <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">{mode === 'shift' ? '3' : '2'}. Select Employees</label>
+              <div className="relative">
                 <input 
-                  type="text"
-                  placeholder="Search employees..."
+                  type="text" 
+                  placeholder="Search..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+                  className="bg-transparent border-b border-gray-700 px-2 py-1 text-xs outline-none focus:border-[var(--accent)] w-32"
                 />
               </div>
-              <div className="flex flex-wrap gap-2 p-2 border border-[var(--border)] rounded-2xl bg-[var(--bg)] min-h-[120px] max-h-48 overflow-y-auto">
-                {employees
-                  .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
-                  .map((e: string) => {
-                    const conflictTask = getConflict(e);
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {employees
+                .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
+                .sort()
+                .map((e: string) => {
+                  const isAssigned = checkConflict(e);
+                  const isSelected = selectedEmps.includes(e);
 
-                    return (
-                      <button 
-                        key={e} 
-                        disabled={!!conflictTask}
-                        onClick={() => selectedEmps.includes(e) ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all border ${
-                          selectedEmps.includes(e) 
-                            ? 'bg-[var(--accent)] text-black border-[var(--accent)]' 
-                            : conflictTask 
-                              ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
-                              : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
-                        }`}
-                      >
-                        {e} {conflictTask && `(${conflictTask})`}
-                      </button>
-                    );
-                  })}
-              </div>
-           </div>
+                  return (
+                    <button 
+                      key={e} 
+                      disabled={isAssigned}
+                      onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
+                        isSelected 
+                          ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
+                          : isAssigned 
+                            ? 'bg-red-500/5 border-red-500/20 text-red-500/40 cursor-not-allowed opacity-50'
+                            : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
+                        {isSelected && <Check size={12} strokeWidth={3} />}
+                      </div>
+                      <span className="flex-1 text-left truncate">{e}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
         </div>
-        
-        <div className="flex gap-4">
-          <button onClick={onClose} className="flex-1 bg-[var(--surface2)] border border-[var(--border)] py-3 rounded-xl text-sm font-bold hover:border-[var(--muted)]">Cancel</button>
-          <button onClick={handleSave} className="flex-1 bg-[var(--accent)] text-black py-3 rounded-xl text-sm font-bold">Save Bulk Assignment</button>
+
+        <div className="flex gap-4 mt-10">
+          <button 
+            onClick={onClose} 
+            className="flex-1 bg-gray-800/40 border border-gray-700 py-4 rounded-2xl text-sm font-bold text-gray-400 hover:bg-gray-800 hover:border-gray-600 transition-all"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            className="flex-1 bg-[var(--accent)] text-black py-4 rounded-2xl text-sm font-bold shadow-xl shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95"
+          >
+            Assign
+          </button>
         </div>
       </div>
     </div>
