@@ -1522,74 +1522,132 @@ function SkillsView({ user }: any) {
 
 function NotesView({ user }: any) {
   const SECTIONS = [
-    { id: 'general', label: 'General Notes', icon: <FileText size={16} /> },
-    { id: 'shift_log', label: 'Shift Logs', icon: <Calendar size={16} /> },
-    { id: 'paypro', label: 'PayPro / Batch', icon: <Archive size={16} /> }
+    { id: 'graveyard', label: 'Schedule Notes', sub: 'Graveyard shift logs', icon: <Calendar size={18} /> },
+    { id: 'shift63', label: 'Schedule Notes', sub: '6-3 shift logs', icon: <Calendar size={18} /> },
+    { id: 'paypro', label: 'PayPro & Batch', sub: 'Assignment logs', icon: <Archive size={18} /> }
   ];
-  
-  const [activeSection, setActiveSection] = useState('general');
+
+  return (
+    <div className="space-y-12">
+      <div>
+        <h2 className="font-serif text-3xl mb-1">Collaboration Notes</h2>
+        <p className="text-sm text-[var(--muted)]">Spreadsheet-style logs for shift management and team updates.</p>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        {SECTIONS.map(s => (
+          <SpreadsheetPanel key={s.id} section={s} user={user} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SpreadsheetPanel({ section, user }: any) {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchRows = useCallback(async () => {
+    setLoading(true);
+    const { data } = await getSb()
+      .from('notes')
+      .select('*')
+      .eq('section_key', section.id)
+      .order('row_idx');
+    
+    const initialRows = data || [];
+    const minRows = 15;
+    const count = Math.max(minRows, initialRows.length > 0 ? Math.max(...initialRows.map((r:any)=>r.row_idx)) + 1 : 0);
+    
+    const displayRows = Array.from({ length: Math.max(minRows, count) }, (_, i) => {
+      const existing = initialRows.find((r: any) => r.row_idx === i);
+      return existing || { row_idx: i, row_data: { name: '', cols: Array(7).fill('') } };
+    });
+    
+    setRows(displayRows);
+    setLoading(false);
+  }, [section.id]);
+
   useEffect(() => {
-    const fetchNotes = async () => {
-      setLoading(true);
-      const { data } = await getSb().from('notes').select('*').eq('section_key', activeSection).order('row_idx');
-      setRows(data || []);
-      setLoading(false);
-    };
-    fetchNotes();
-  }, [activeSection]);
+    fetchRows();
+  }, [fetchRows]);
 
   const updateRow = async (idx: number, name: string, cols: string[]) => {
     if (!user.isAdmin) return;
-    const rowData = { name, cols };
-    await getSb().from('notes').upsert({
-      section_key: activeSection,
+    
+    // Update local state first
+    setRows(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], row_data: { name, cols } };
+      return next;
+    });
+
+    const { error } = await getSb().from('notes').upsert({
+      section_key: section.id,
       row_idx: idx,
-      row_data: rowData
+      row_data: { name, cols }
     }, { onConflict: 'section_key,row_idx' });
+    
+    if (error) console.error(error);
   };
 
-  const addRow = () => {
-    if (!user.isAdmin) return;
-    setRows([...rows, { row_idx: rows.length, row_data: { name: '', cols: Array(5).fill('') } }]);
+  const addRows = () => {
+    const startIdx = rows.length;
+    const newRows = Array.from({ length: 5 }, (_, i) => ({
+      row_idx: startIdx + i,
+      row_data: { name: '', cols: Array(7).fill('') }
+    }));
+    setRows([...rows, ...newRows]);
   };
+
+  if (loading) return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl h-[500px] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]"></div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="font-serif text-3xl">Collaboration Notes</h2>
-        {user.isAdmin && <button onClick={addRow} className="flex items-center gap-2 bg-[var(--accent)] text-black px-4 py-2 rounded-xl text-sm font-bold"><Plus size={16} /> Add Row</button>}
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+      <div className="bg-[var(--surface2)]/50 px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-[var(--accent)]/10 rounded-lg text-[var(--accent)]">
+            {section.icon}
+          </div>
+          <div>
+            <div className="text-sm font-bold text-[var(--text)]">{section.label}</div>
+            <div className="text-[10px] text-[var(--muted)] font-medium uppercase tracking-wider">{section.sub}</div>
+          </div>
+        </div>
+        {user.isAdmin && (
+          <button 
+            onClick={addRows}
+            className="text-[10px] uppercase font-bold tracking-widest text-[var(--accent)] hover:opacity-80 transition-opacity"
+          >
+            + Add Rows
+          </button>
+        )}
       </div>
 
-      <div className="flex gap-2 p-1 bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-fit overflow-x-auto max-w-full">
-         {SECTIONS.map(s => (
-           <button 
-             key={s.id} onClick={() => setActiveSection(s.id)}
-             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${activeSection === s.id ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
-           >
-             {s.icon} {s.label}
-           </button>
-         ))}
-      </div>
-
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-x-auto shadow-2xl">
-        <table className="w-full border-collapse table-fixed min-w-[800px]">
-          <thead>
-            <tr className="bg-[var(--surface2)] text-[10px] uppercase font-bold text-[var(--muted)] border-b border-[var(--border)]">
-              <th className="w-12 px-2 py-4">#</th>
-              <th className="w-40 px-4 py-4 text-left border-r border-[var(--border)]">Name / Topic</th>
-              {Array.from({ length: 10 }).map((_, i) => (
-                <th key={i} className="px-2 py-4 border-r border-[var(--border)]">{i + 1}</th>
+      <div className="flex-1 overflow-auto bg-[#0d0f14] scrollbar-thin scrollbar-thumb-[var(--border)]">
+        <table className="w-full border-collapse table-fixed min-w-[700px]">
+          <thead className="sticky top-0 z-10 bg-[#1a1d24]">
+            <tr className="text-[9px] uppercase font-bold text-[var(--muted)]">
+              <th className="w-10 py-3 border-r border-b border-[var(--border)] bg-[#1a1d24]">#</th>
+              <th className="w-40 px-3 py-3 text-left border-r border-b border-[var(--border)] bg-[#1a1d24]">NAME</th>
+              {Array.from({ length: 7 }).map((_, i) => (
+                <th key={i} className="py-3 border-r border-b border-[var(--border)]">{i + 1}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border)]">
-            {rows.length === 0 ? (
-               <tr><td colSpan={12} className="py-20 text-center text-[var(--muted)] text-sm">No notes entry. Click Add Row to start.</td></tr>
-            ) : rows.map((r, i) => (
-              <NoteRowComponent key={i} index={i} row={r} readonly={!user.isAdmin} onUpdate={(name, cols) => updateRow(i, name, cols)} />
+          <tbody className="">
+            {rows.map((r, i) => (
+              <SpreadsheetRow 
+                key={i} 
+                index={i} 
+                data={r.row_data} 
+                readonly={!user.isAdmin} 
+                onUpdate={(name: string, cols: string[]) => updateRow(i, name, cols)} 
+              />
             ))}
           </tbody>
         </table>
@@ -1598,12 +1656,19 @@ function NotesView({ user }: any) {
   );
 }
 
-function NoteRowComponent({ index, row, readonly, onUpdate }: any) {
-  const [name, setName] = useState(row.row_data?.name || '');
-  const [cols, setCols] = useState(row.row_data?.cols || Array(10).fill(''));
+function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
+  const [name, setName] = useState(data?.name || '');
+  const [cols, setCols] = useState(data?.cols || Array(7).fill(''));
+
+  useEffect(() => {
+    setName(data?.name || '');
+    setCols(data?.cols || Array(7).fill(''));
+  }, [data]);
 
   const handleBlur = () => {
-    onUpdate(name, cols);
+    if (name !== data.name || JSON.stringify(cols) !== JSON.stringify(data.cols)) {
+      onUpdate(name, cols);
+    }
   };
 
   const updateCol = (idx: number, val: string) => {
@@ -1612,23 +1677,52 @@ function NoteRowComponent({ index, row, readonly, onUpdate }: any) {
     setCols(next);
   };
 
+  const getCellColor = (val: string) => {
+    if (!val) return '';
+    const lower = val.toLowerCase();
+    if (lower.includes('jan')) return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+    if (lower.includes('feb')) return 'bg-red-500/20 text-red-300 border-red-500/30';
+    if (lower.includes('march')) return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    if (lower.includes('april')) return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+    if (lower.includes('may')) return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+    if (lower.includes('june')) return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
+    return '';
+  };
+
   return (
-    <tr className="hover:bg-white/[0.01]">
-      <td className="text-center font-mono text-[10px] text-[var(--muted)]">{index + 1}</td>
-      <td className="border-r border-[var(--border)] p-1">
+    <tr className="group transition-colors h-9">
+      <td className="text-center font-mono text-[10px] text-[var(--muted)] border-r border-b border-[var(--border)] bg-[#161820]/50 group-hover:bg-[#20232d] transition-colors">
+        {index + 1}
+      </td>
+      <td className="border-r border-b border-[var(--border)] p-0">
         <input 
-          value={name} onChange={e => setName(e.target.value)} onBlur={handleBlur} readOnly={readonly}
-          className="w-full bg-transparent text-xs font-bold px-3 py-1.5 outline-none focus:bg-[var(--accent)]/5" 
+          value={name} 
+          onChange={e => setName(e.target.value)} 
+          onBlur={handleBlur} 
+          readOnly={readonly}
+          placeholder={readonly ? "" : "..."}
+          className="w-full h-full bg-transparent text-[11px] font-bold text-[var(--text)] px-3 outline-none focus:bg-[var(--accent)]/5 hover:bg-white/[0.02]" 
         />
       </td>
-      {Array.from({ length: 10 }).map((_, ci) => (
-        <td key={ci} className="border-r border-[var(--border)] p-0.5">
-          <input 
-            value={cols[ci] || ''} onChange={e => updateCol(ci, e.target.value)} onBlur={handleBlur} readOnly={readonly}
-            className="w-full bg-transparent text-[10px] px-2 py-2 outline-none text-center focus:bg-[var(--accent)]/5" 
-          />
-        </td>
-      ))}
+      {Array.from({ length: 7 }).map((_, ci) => {
+        const val = cols[ci] || '';
+        const colorClass = getCellColor(val);
+        return (
+          <td key={ci} className={`border-r border-b border-[var(--border)] p-0.5 relative`}>
+            <input 
+              value={val} 
+              onChange={e => updateCol(ci, e.target.value)} 
+              onBlur={handleBlur} 
+              readOnly={readonly}
+              className={`w-full h-full bg-transparent text-[9px] px-2 outline-none text-center rounded transition-all ${
+                colorClass ? `${colorClass} font-bold border` : 'focus:bg-[var(--accent)]/5 hover:bg-white/[0.02]'
+              }`} 
+            />
+          </td>
+        );
+      })}
     </tr>
   );
 }
+
+
