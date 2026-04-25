@@ -952,6 +952,7 @@ function ScheduleView({ data, user, refresh }: any) {
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedCell, setSelectedCell] = useState<{ date: string; shiftId?: number; leaveType?: string } | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -1066,18 +1067,59 @@ function ScheduleView({ data, user, refresh }: any) {
     refresh();
   };
 
+  const handleBulkDelete = async (params: any) => {
+    const { selectedEmps, mode, startDate, endDate } = params;
+    
+    // Generate dates
+    let datesInRange: string[] = [];
+    let curr = new Date(startDate);
+    const end = new Date(endDate);
+    while (curr <= end) {
+      datesInRange.push(curr.toISOString().slice(0, 10));
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (mode === 'all') {
+      await getSb().from('schedule_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange);
+      await getSb().from('leave_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange);
+    } else if (mode === 'shift') {
+      const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
+      const query = getSb().from('schedule_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange);
+      if (payProType) query.neq('shift_type_id', payProType.id);
+      await query;
+    } else if (mode === 'paypro') {
+      const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
+      if (payProType) {
+        await getSb().from('schedule_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange).eq('shift_type_id', payProType.id);
+      }
+    } else if (mode === 'dayoff') {
+      await getSb().from('leave_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange).eq('leave_type', 'Dayoff');
+    }
+
+    setShowBulkDeleteModal(false);
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <h2 className="font-serif text-3xl">Monthly Schedule</h2>
           {user.isAdmin && (
-            <button 
-              onClick={() => setShowBulkModal(true)}
-              className="bg-[var(--accent)] text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-[#f0d060]"
-            >
-              <Plus size={16} /> Bulk Assign
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowBulkModal(true)}
+                className="bg-[var(--accent)] text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-[#f0d060]"
+              >
+                <Plus size={16} /> Bulk Assign
+              </button>
+              <button 
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-red-500/20"
+              >
+                <Trash2 size={16} /> Bulk Delete
+              </button>
+            </div>
           )}
         </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
@@ -1190,6 +1232,15 @@ function ScheduleView({ data, user, refresh }: any) {
           assignments={data.assignments}
           scheduleEntries={data.scheduleEntries}
           leaveEntries={data.leaveEntries}
+          currentMonth={currentMonth}
+        />
+      )}
+
+      {showBulkDeleteModal && (
+        <BulkDeleteModal 
+          employees={data.employees}
+          onClose={() => setShowBulkDeleteModal(false)}
+          onSave={handleBulkDelete}
           currentMonth={currentMonth}
         />
       )}
@@ -1488,6 +1539,169 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
             className="flex-1 bg-[var(--accent)] text-black py-4 rounded-2xl text-sm font-bold shadow-xl shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95"
           >
             Assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
+  const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
+  const [mode, setMode] = useState<'all' | 'shift' | 'paypro' | 'dayoff'>('all');
+  const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
+  const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
+  const [search, setSearch] = useState('');
+
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const dates = Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`);
+  const weeks: string[][] = [];
+  let currentWeek: string[] = [];
+  dates.forEach(d => {
+    currentWeek.push(d);
+    if (new Date(d).getDay() === 0) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  });
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+
+  const getActiveDates = () => {
+    if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
+    if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
+    return weeks[selectedWeekIdx] || [];
+  };
+
+  const activeDates = getActiveDates();
+  const startDate = activeDates[0] || '';
+  const endDate = activeDates[activeDates.length - 1] || '';
+
+  const handleSave = () => {
+    if (selectedEmps.length === 0) {
+      alert('Please select employees.');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete ${mode} entries for the selected employees and period?`)) {
+      onSave({ selectedEmps, mode, startDate, endDate });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-[#1a1d24] border border-red-500/20 rounded-[32px] p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[95vh] relative">
+        <button onClick={onClose} className="absolute right-6 top-6 text-gray-500 hover:text-white"><X size={24} /></button>
+        
+        <div className="flex items-center gap-3 mb-2">
+          <Trash2 size={24} className="text-red-500" />
+          <h3 className="font-serif text-3xl">Bulk Delete</h3>
+        </div>
+        <p className="text-sm text-gray-400 mb-8">Delete multiple entries for a specific period and employees.</p>
+
+        <div className="grid grid-cols-4 gap-3 mb-8">
+          {[
+            { id: 'all', label: 'All', icon: ClipboardList, color: 'text-white' },
+            { id: 'shift', label: 'Shifts', icon: Clock, color: 'text-[var(--accent)]' },
+            { id: 'paypro', label: 'PayPro', icon: Zap, color: 'text-orange-400' },
+            { id: 'dayoff', label: 'Day Off', icon: Moon, color: 'text-pink-400' },
+          ].map(it => (
+            <button 
+              key={it.id}
+              onClick={() => setMode(it.id as any)}
+              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === it.id ? 'bg-red-500/10 border-red-500 text-red-500' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+            >
+              <it.icon size={20} className={`mb-2 ${mode === it.id ? 'text-red-500' : it.color}`} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{it.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-8">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">1. Select Period</label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button 
+                onClick={() => setPeriodType('p1')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >1–15</button>
+              <button 
+                onClick={() => setPeriodType('p2')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >16–{daysInMonth}</button>
+              {weeks.map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                >Week {i + 1}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
+              {activeDates.map(d => {
+                const dayName = DAY_NAMES[new Date(d).getDay()];
+                return (
+                  <div key={d} className="flex flex-col items-center px-3 py-1.5 rounded-xl border border-gray-700 bg-gray-800/40 text-gray-400 text-[10px] font-bold">
+                    <span className="opacity-60">{dayName}</span>
+                    <span className="text-xs">{Number(d.split('-')[2])}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">2. Select Employees</label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Search..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="bg-transparent border-b border-gray-700 px-2 py-1 text-xs outline-none focus:border-red-500 w-32 font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {employees
+                .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
+                .sort()
+                .map((e: string) => {
+                  const isSelected = selectedEmps.includes(e);
+                  return (
+                    <button 
+                      key={e} 
+                      onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
+                        isSelected 
+                          ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/10' 
+                          : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-white/20' : 'bg-black/40 border-gray-600'}`}>
+                        {isSelected && <Check size={12} strokeWidth={3} />}
+                      </div>
+                      <span className="flex-1 text-left truncate">{e}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4 mt-10">
+          <button 
+            onClick={onClose} 
+            className="flex-1 bg-gray-800/40 border border-gray-700 py-4 rounded-2xl text-sm font-bold text-gray-400 hover:bg-gray-800 hover:border-gray-600 transition-all font-serif"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            className="flex-1 bg-red-600 text-white py-4 rounded-2xl text-sm font-bold shadow-xl shadow-red-600/10 hover:bg-red-500 transition-all transform active:scale-95 font-serif uppercase tracking-widest"
+          >
+            Delete Entries
           </button>
         </div>
       </div>
