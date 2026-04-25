@@ -1522,8 +1522,8 @@ function SkillsView({ user }: any) {
 
 function NotesView({ user }: any) {
   const SECTIONS = [
-    { id: 'graveyard', label: 'Schedule Notes', sub: 'Graveyard shift logs', icon: <Calendar size={18} /> },
-    { id: 'shift63', label: 'Schedule Notes', sub: '6-3 shift logs', icon: <Calendar size={18} /> },
+    { id: 'shift63', label: 'Schedule Notes', sub: '6:00AM - 3:00PM / 8:00AM - 5:00PM Logs', icon: <Calendar size={18} /> },
+    { id: 'graveyard', label: 'Schedule Notes', sub: '10:00PM - 6:00AM Logs', icon: <Calendar size={18} /> },
     { id: 'paypro', label: 'PayPro & Batch', sub: 'Assignment logs', icon: <Archive size={18} /> }
   ];
 
@@ -1534,7 +1534,7 @@ function NotesView({ user }: any) {
         <p className="text-sm text-[var(--muted)]">Spreadsheet-style logs for shift management and team updates.</p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-8">
         {SECTIONS.map(s => (
           <SpreadsheetPanel key={s.id} section={s} user={user} />
         ))}
