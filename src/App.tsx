@@ -1031,8 +1031,11 @@ function ScheduleView({ data, user, refresh }: any) {
     const end = new Date(endDate + 'T00:00:00');
     
     while (curr <= end) {
-      const d = curr.toISOString().split('T')[0];
-      // Filter by weekdays if provided
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const day = String(curr.getDate()).padStart(2, '0');
+      const d = `${year}-${month}-${day}`;
+      
       if (!weekdays || weekdays.includes(curr.getDay())) {
         datesInRange.push(d);
       }
@@ -1097,7 +1100,10 @@ function ScheduleView({ data, user, refresh }: any) {
     let curr = new Date(startDate + 'T00:00:00');
     const end = new Date(endDate + 'T00:00:00');
     while (curr <= end) {
-      datesInRange.push(curr.toISOString().split('T')[0]);
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const day = String(curr.getDate()).padStart(2, '0');
+      datesInRange.push(`${year}-${month}-${day}`);
       curr.setDate(curr.getDate() + 1);
     }
 
@@ -1170,7 +1176,9 @@ function ScheduleView({ data, user, refresh }: any) {
                     <th className="px-4 py-3 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider border-r border-[var(--border)] w-40">Shift</th>
                     {week.map(d => {
                       const isSun = new Date(d + 'T00:00:00').getDay() === 0;
-                      const isToday = d === new Date().toISOString().slice(0, 10);
+                      const now = new Date();
+                      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                      const isToday = d === todayStr;
                       return (
                         <th key={d} className={`px-4 py-3 border-r border-[var(--border)] min-w-[140px] text-center ${isSun ? 'text-[var(--red)]' : ''} ${isToday ? 'bg-[var(--accent)]/10 text-[var(--accent)] font-bold' : ''}`}>
                           <div className="text-xl font-serif">{new Date(d + 'T00:00:00').getDate()}</div>
@@ -1388,17 +1396,6 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     return busyOnAnyActiveDate(activeDates);
   };
 
-  const isWeekDayDisabled = (dayValue: number) => {
-    if (selectedEmps.length === 0) return false;
-    const weekdayDates = dates.filter(d => new Date(d).getDay() === dayValue);
-    // Disable if ALL selected employees already have "Dayoff" on ALL these weekdays in the month
-    return selectedEmps.every(emp => 
-      weekdayDates.every(d => 
-        leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff')
-      )
-    );
-  };
-
   const WEEKDAYS = [
     { label: 'Mon', value: 1 },
     { label: 'Tue', value: 2 },
@@ -1408,6 +1405,9 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     { label: 'Sat', value: 6 },
     { label: 'Sun', value: 0 },
   ];
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -1453,11 +1453,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
             {mode === 'dayoff' ? (
               <div className="flex flex-wrap gap-2">
                 {WEEKDAYS.map(day => {
-                  const isDisabled = isWeekDayDisabled(day.value);
+                  const hasConflict = activeDates.length > 0 && activeDates.some(d => 
+                    leaveEntries.some((l: any) => l.schedule_date === d && l.leave_type !== 'Dayoff')
+                  );
                   return (
                     <button 
                       key={day.value}
-                      disabled={isDisabled}
                       onClick={() => {
                         setSelectedWeekdays(prev => 
                           prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
@@ -1466,9 +1467,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all flex-1 min-w-[80px] ${
                         selectedWeekdays.includes(day.value) 
                           ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' 
-                          : isDisabled
-                            ? 'bg-red-500/5 border-red-500/10 text-red-500/30 cursor-not-allowed opacity-50'
-                            : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
+                          : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
                       }`}
                     >
                       {day.label}
