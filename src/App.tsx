@@ -555,17 +555,33 @@ function AdminView({ data, user, refresh }: any) {
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Select Employees</label>
             <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-xl bg-[var(--bg)]">
-              {data.employees.map((e: string) => (
-                <button 
-                  key={e} 
-                  onClick={() => selectedEmployees.includes(e) ? setSelectedEmployees(selectedEmployees.filter(x => x !== e)) : setSelectedEmployees([...selectedEmployees, e])}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                    selectedEmployees.includes(e) ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
+              {data.employees.map((e: string) => {
+                const conflicted = (() => {
+                  if (assignTask === 'GCASH' || assignTask === 'ELOAD') return false;
+                  return data.assignments.some((a: any) => {
+                    if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+                    if (!a.employees.includes(e)) return false;
+                    return (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
+                  });
+                })();
+
+                return (
+                  <button 
+                    key={e} 
+                    disabled={conflicted}
+                    onClick={() => selectedEmployees.includes(e) ? setSelectedEmployees(selectedEmployees.filter(x => x !== e)) : setSelectedEmployees([...selectedEmployees, e])}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                      selectedEmployees.includes(e) 
+                        ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' 
+                        : conflicted 
+                          ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                          : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
+                    }`}
+                  >
+                    {e} {conflicted && '(Busy)'}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -727,6 +743,7 @@ function TaskView({ data, user }: any) {
 function ScheduleView({ data, user, refresh }: any) {
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedCell, setSelectedCell] = useState<{ date: string; shiftId?: number; leaveType?: string } | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -796,10 +813,48 @@ function ScheduleView({ data, user, refresh }: any) {
     refresh();
   };
 
+  const handleBulkSave = async (params: any) => {
+    const { selectedEmps, shiftId, leaveType, startDate, endDate } = params;
+    
+    // Generate dates
+    const datesInRange: string[] = [];
+    let curr = new Date(startDate);
+    const end = new Date(endDate);
+    while (curr <= end) {
+      datesInRange.push(curr.toISOString().slice(0, 10));
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (shiftId) {
+      const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
+        schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
+      })));
+      await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+    } else if (leaveType) {
+      const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
+        schedule_date: d, employee_name: emp, leave_type: leaveType, added_by: user.name
+      })));
+      await getSb().from('leave_entries').upsert(rows, { onConflict: 'schedule_date,employee_name,leave_type' });
+    }
+
+    setShowBulkModal(false);
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="font-serif text-3xl">Monthly Schedule</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="font-serif text-3xl">Monthly Schedule</h2>
+          {user.isAdmin && (
+            <button 
+              onClick={() => setShowBulkModal(true)}
+              className="bg-[var(--accent)] text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-[#f0d060]"
+            >
+              <Plus size={16} /> Bulk Assign
+            </button>
+          )}
+        </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
@@ -897,13 +952,126 @@ function ScheduleView({ data, user, refresh }: any) {
           selected={selectedCell.shiftId ? getShiftEmployees(selectedCell.date, selectedCell.shiftId) : getLeaveEmployees(selectedCell.date, selectedCell.leaveType!)}
           onClose={() => setSelectedCell(null)}
           onSave={saveCell}
+          assignments={data.assignments}
+        />
+      )}
+
+      {showBulkModal && (
+        <BulkAssignModal 
+          employees={data.employees}
+          shiftTypes={data.shiftTypes}
+          onClose={() => setShowBulkModal(false)}
+          onSave={handleBulkSave}
+          assignments={data.assignments}
         />
       )}
     </div>
   );
 }
 
-function SelectionModal({ title, date, items, selected: initialSelected, onClose, onSave }: any) {
+function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments }: any) {
+  const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
+  const [shiftId, setShiftId] = useState<number | string>('');
+  const [leaveType, setLeaveType] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const handleSave = () => {
+    if (selectedEmps.length === 0 || (!shiftId && !leaveType) || !startDate || !endDate) {
+      alert('Please select employees, a shift/leave type, and a date range.');
+      return;
+    }
+    onSave({ selectedEmps, shiftId, leaveType, startDate, endDate });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
+        <h3 className="font-serif text-2xl mb-1">Bulk Assign Schedule</h3>
+        <p className="text-sm text-[var(--muted)] mb-6">Assign multiple employees to a shift or leave for a specific date range.</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+           <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">From</label>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none" />
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">To</label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none" />
+                 </div>
+              </div>
+
+              <div>
+                 <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">Assign As</label>
+                 <select 
+                   value={shiftId || leaveType} 
+                   onChange={e => {
+                     const val = e.target.value;
+                     if (['Dayoff', 'Pre Approved Leave'].includes(val)) {
+                       setLeaveType(val);
+                       setShiftId('');
+                     } else {
+                       setShiftId(Number(val));
+                       setLeaveType('');
+                     }
+                   }}
+                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+                 >
+                    <option value="">Select Shift or Leave...</option>
+                    <optgroup label="Shifts">
+                       {shiftTypes.map((st: any) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                    </optgroup>
+                    <optgroup label="Leaves">
+                       <option value="Dayoff">Day Off</option>
+                       <option value="Pre Approved Leave">Pre-Approved Leave</option>
+                    </optgroup>
+                 </select>
+              </div>
+           </div>
+
+           <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-2">Select Employees</label>
+              <div className="flex flex-wrap gap-2 p-2 border border-[var(--border)] rounded-2xl bg-[var(--bg)] min-h-[120px]">
+                {employees.map((e: string) => {
+                  const conflicted = assignments.some((a: any) => {
+                    if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+                    if (!a.employees.includes(e)) return false;
+                    return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
+                  });
+
+                  return (
+                    <button 
+                      key={e} 
+                      disabled={conflicted}
+                      onClick={() => selectedEmps.includes(e) ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all border ${
+                        selectedEmps.includes(e) 
+                          ? 'bg-[var(--accent)] text-black border-[var(--accent)]' 
+                          : conflicted 
+                            ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                            : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
+                      }`}
+                    >
+                      {e} {conflicted && '(Busy)'}
+                    </button>
+                  );
+                })}
+              </div>
+           </div>
+        </div>
+        
+        <div className="flex gap-4">
+          <button onClick={onClose} className="flex-1 bg-[var(--surface2)] border border-[var(--border)] py-3 rounded-xl text-sm font-bold hover:border-[var(--muted)]">Cancel</button>
+          <button onClick={handleSave} className="flex-1 bg-[var(--accent)] text-black py-3 rounded-xl text-sm font-bold">Save Bulk Assignment</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectionModal({ title, date, items, selected: initialSelected, onClose, onSave, assignments }: any) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
 
   return (
@@ -913,17 +1081,30 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
         <p className="text-sm text-[var(--muted)] mb-6">{date}</p>
         
         <div className="flex flex-wrap gap-2 max-h-[40vh] overflow-y-auto mb-8">
-          {items.map((item: string) => (
-            <button 
-              key={item}
-              onClick={() => selected.includes(item) ? setSelected(selected.filter(x => x !== item)) : setSelected([...selected, item])}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
-                selected.includes(item) ? 'bg-[var(--accent)] text-black border-[var(--accent)] font-bold' : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
-              }`}
-            >
-              {item}
-            </button>
-          ))}
+          {items.map((item: string) => {
+             const conflicted = assignments.some((a: any) => {
+               if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+               if (!a.employees.includes(item)) return false;
+               return (date <= a.dutyTo && date >= a.dutyFrom);
+             });
+
+             return (
+               <button 
+                 key={item}
+                 disabled={conflicted}
+                 onClick={() => selected.includes(item) ? setSelected(selected.filter(x => x !== item)) : setSelected([...selected, item])}
+                 className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                   selected.includes(item) 
+                     ? 'bg-[var(--accent)] text-black border-[var(--accent)] font-bold' 
+                     : conflicted 
+                       ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
+                       : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
+                 }`}
+               >
+                 {item} {conflicted && '(Busy)'}
+               </button>
+             );
+          })}
         </div>
         
         <div className="flex gap-4">

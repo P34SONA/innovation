@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at timestamptz DEFAULT now()
 );
 
+-- Seed common tasks
+INSERT INTO tasks (name) VALUES 
+('SDP'),
+('DELTA'),
+('GCASH'),
+('ELOAD')
+ON CONFLICT (name) DO NOTHING;
+
 -- 4. Assignments table
 CREATE TABLE IF NOT EXISTS assignments (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -52,10 +60,9 @@ CREATE TABLE IF NOT EXISTS shift_types (
 
 -- Seed Shift Types
 INSERT INTO shift_types (name, sort_order) VALUES 
-('6:00 AM - 3:00 PM Shift', 1),
-('8:00 AM - 5:00 PM Shift', 2),
-('10:00 PM - 6:00 AM Shift', 3),
-('PayPro & Batch Upload', 4)
+('6am-3pm', 1),
+('8am-5pm', 2),
+('10pm-6am', 3)
 ON CONFLICT (name) DO NOTHING;
 
 -- 7. Schedule Entries (Shifts)
