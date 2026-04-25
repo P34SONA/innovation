@@ -1339,7 +1339,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     } else {
       setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
     }
-  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length, excludedDates]);
+  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length, excludedDates, shiftId]);
 
   // Reset excluded dates when period or mode changes
   useEffect(() => {
@@ -1393,7 +1393,20 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       return false;
     }
 
-    // For other modes, check existing schedule/leaves on target dates
+    if (mode === 'shift') {
+      if (!shiftId) return false;
+      return activeDates.some(d => {
+        const hasOtherShift = scheduleEntries.some((s: any) => 
+          s.employee_name === emp && s.schedule_date === d && s.shift_type_id != shiftId
+        );
+        const hasLeave = leaveEntries.some((l: any) => 
+          l.employee_name === emp && l.schedule_date === d
+        );
+        return hasOtherShift || hasLeave;
+      });
+    }
+
+    // For other modes (paypro), check if any day in the activeDates is busy
     const busyOnAnyActiveDate = (datesToCheck: string[]) => {
       return datesToCheck.some(d => {
         const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
