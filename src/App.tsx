@@ -963,7 +963,7 @@ function ScheduleView({ data, user, refresh }: any) {
   let currentWeek: string[] = [];
   dates.forEach(d => {
     currentWeek.push(d);
-    if (new Date(d).getDay() === 0) {
+    if (new Date(d + 'T00:00:00').getDay() === 0) {
       weeks.push(currentWeek);
       currentWeek = [];
     }
@@ -1025,12 +1025,13 @@ function ScheduleView({ data, user, refresh }: any) {
   const handleBulkSave = async (params: any) => {
     const { selectedEmps, shiftId, leaveType, isPayPro, startDate, endDate, weekdays } = params;
     
-    // Generate dates
-    let datesInRange: string[] = [];
-    let curr = new Date(startDate);
-    const end = new Date(endDate);
+    // Generate dates in YYYY-MM-DD format safely
+    const datesInRange: string[] = [];
+    let curr = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    
     while (curr <= end) {
-      const d = curr.toISOString().slice(0, 10);
+      const d = curr.toISOString().split('T')[0];
       // Filter by weekdays if provided
       if (!weekdays || weekdays.includes(curr.getDay())) {
         datesInRange.push(d);
@@ -1038,29 +1039,50 @@ function ScheduleView({ data, user, refresh }: any) {
       curr.setDate(curr.getDate() + 1);
     }
 
-    if (isPayPro) {
-      // Find the PayPro shift type id
-      const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
-      if (payProType) {
+    if (datesInRange.length === 0) return;
+
+    try {
+      if (isPayPro) {
+        const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
+        if (payProType) {
+          const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
+            schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
+          })));
+          const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+          if (error) throw error;
+        }
+      } else if (shiftId) {
         const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
-          schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
+          schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
         })));
-        await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
-      }
-    } else if (shiftId) {
+        const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+        if (error) throw error;
+    } else if (leaveType === 'Dayoff') {
+      // Source of truth: For the selected dates, the selection state is final.
+      // First, clear existing entries for these dates for ALL employees
+      await getSb().from('schedule_entries').delete().in('employee_name', data.employees).in('schedule_date', datesInRange);
+      await getSb().from('leave_entries').delete().in('employee_name', data.employees).in('schedule_date', datesInRange).eq('leave_type', 'Dayoff');
+
       const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
-        schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
+        schedule_date: d, employee_name: emp, leave_type: 'Dayoff', added_by: user.name
       })));
-      await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+      
+      if (rows.length > 0) {
+        const { error } = await getSb().from('leave_entries').insert(rows);
+        if (error) throw error;
+      }
     } else if (leaveType) {
-      if (leaveType === 'Dayoff') {
-        // Overrides: delete existing shifts for these employees and dates
-        await getSb().from('schedule_entries').delete().in('employee_name', selectedEmps).in('schedule_date', datesInRange);
+        // Other leaves
+        const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
+          schedule_date: d, employee_name: emp, leave_type: leaveType, added_by: user.name
+        })));
+        const { error } = await getSb().from('leave_entries').insert(rows);
+        if (error) throw error;
       }
-      const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
-        schedule_date: d, employee_name: emp, leave_type: leaveType, added_by: user.name
-      })));
-      await getSb().from('leave_entries').upsert(rows, { onConflict: 'schedule_date,employee_name' });
+    } catch (err: any) {
+      console.error(err);
+      alert('Error saving: ' + (err.message || 'Unknown error'));
+      return;
     }
 
     setShowBulkModal(false);
@@ -1070,12 +1092,12 @@ function ScheduleView({ data, user, refresh }: any) {
   const handleBulkDelete = async (params: any) => {
     const { selectedEmps, mode, startDate, endDate } = params;
     
-    // Generate dates
-    let datesInRange: string[] = [];
-    let curr = new Date(startDate);
-    const end = new Date(endDate);
+    // Generate dates in YYYY-MM-DD format safely
+    const datesInRange: string[] = [];
+    let curr = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
     while (curr <= end) {
-      datesInRange.push(curr.toISOString().slice(0, 10));
+      datesInRange.push(curr.toISOString().split('T')[0]);
       curr.setDate(curr.getDate() + 1);
     }
 
@@ -1147,12 +1169,12 @@ function ScheduleView({ data, user, refresh }: any) {
                   <tr className="bg-[var(--surface2)] text-left">
                     <th className="px-4 py-3 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider border-r border-[var(--border)] w-40">Shift</th>
                     {week.map(d => {
-                      const isSun = new Date(d).getDay() === 0;
+                      const isSun = new Date(d + 'T00:00:00').getDay() === 0;
                       const isToday = d === new Date().toISOString().slice(0, 10);
                       return (
                         <th key={d} className={`px-4 py-3 border-r border-[var(--border)] min-w-[140px] text-center ${isSun ? 'text-[var(--red)]' : ''} ${isToday ? 'bg-[var(--accent)]/10 text-[var(--accent)] font-bold' : ''}`}>
-                          <div className="text-xl font-serif">{new Date(d).getDate()}</div>
-                          <div className="text-[10px] font-bold uppercase">{DAY_NAMES[new Date(d).getDay()]}</div>
+                          <div className="text-xl font-serif">{new Date(d + 'T00:00:00').getDate()}</div>
+                          <div className="text-[10px] font-bold uppercase">{DAY_NAMES[new Date(d + 'T00:00:00').getDay()]}</div>
                         </th>
                       );
                     })}
@@ -1266,7 +1288,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   let currentWeek: string[] = [];
   dates.forEach(d => {
     currentWeek.push(d);
-    if (new Date(d).getDay() === 0) {
+    if (new Date(d + 'T00:00:00').getDay() === 0) {
       weeks.push(currentWeek);
       currentWeek = [];
     }
@@ -1276,7 +1298,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const getActiveDates = () => {
     if (mode === 'dayoff') {
       // For Day Off, we target the whole month but only specific weekdays
-      return dates.filter(d => selectedWeekdays.includes(new Date(d).getDay()));
+      return dates.filter(d => selectedWeekdays.includes(new Date(d + 'T00:00:00').getDay()));
     }
     if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
     if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
@@ -1287,10 +1309,25 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const startDate = mode === 'dayoff' ? `${currentMonth}-01` : (activeDates[0] || '');
   const endDate = mode === 'dayoff' ? `${currentMonth}-${String(daysInMonth).padStart(2, '0')}` : (activeDates[activeDates.length - 1] || '');
 
-  // Clear selected employees if they become conflicted in the new period
+  // Effect to handle pre-selection and conflict filtering
   useEffect(() => {
-    setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
-  }, [periodType, selectedWeekIdx, mode, selectedWeekdays]);
+    if (mode === 'dayoff') {
+      if (selectedWeekdays.length > 0) {
+        // User requested: "when admin select day... names assigned for selected day will highlighted"
+        // Pre-select employees who already have Dayoff on ANY of the selected dates
+        const alreadyAssigned = employees.filter((emp: string) => {
+          return activeDates.some(d => 
+            leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff')
+          );
+        });
+        setSelectedEmps(alreadyAssigned);
+      } else {
+        setSelectedEmps([]);
+      }
+    } else {
+      setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
+    }
+  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length]);
 
   const handleSave = () => {
     if (selectedEmps.length === 0) {
@@ -1319,15 +1356,27 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
   const checkConflict = (emp: string) => {
     if (mode === 'dayoff') {
-      // If any Dayoff exists for this employee in the entire month, disable them.
-      return leaveEntries.some((l: any) => 
-        l.employee_name === emp && 
-        l.leave_type === 'Dayoff' && 
-        l.schedule_date.startsWith(currentMonth)
+      // 1. Conflict if they have a DIFFERENT leave type on the target dates (activeDates).
+      const hasOtherLeave = activeDates.some(d => 
+        leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff')
       );
+      if (hasOtherLeave) return true;
+
+      // 2. Disable if they have "Dayoff" on OTHER weekdays in the same month that are NOT in the current selection.
+      if (activeDates.length > 0) {
+        const hasDayOffOnOtherDays = leaveEntries.some((l: any) => 
+          l.employee_name === emp && 
+          l.leave_type === 'Dayoff' && 
+          l.schedule_date.startsWith(currentMonth) && 
+          !activeDates.includes(l.schedule_date)
+        );
+        return hasDayOffOnOtherDays;
+      }
+      
+      return false;
     }
 
-    // For other modes, check if any day in the activeDates (matching selection) is busy
+    // For other modes, check existing schedule/leaves on target dates
     const busyOnAnyActiveDate = (datesToCheck: string[]) => {
       return datesToCheck.some(d => {
         const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
@@ -1562,7 +1611,7 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
   let currentWeek: string[] = [];
   dates.forEach(d => {
     currentWeek.push(d);
-    if (new Date(d).getDay() === 0) {
+    if (new Date(d + 'T00:00:00').getDay() === 0) {
       weeks.push(currentWeek);
       currentWeek = [];
     }
