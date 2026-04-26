@@ -55,6 +55,16 @@ const getTodayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const getYesterdayStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const formatDate = (date: Date) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 const getMonthStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -206,7 +216,7 @@ export default function App() {
           <TabButton 
             active={activeTab === 'schedule'} 
             onClick={() => setActiveTab('schedule')} 
-            icon={<Calendar size={18} />} 
+            icon={<Calendar size={18} className="text-white" />} 
             label="Schedule" 
           />
           {!user.isGuest && (
@@ -433,7 +443,6 @@ function AdminView({ data, user, refresh }: any) {
   
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [autoRotate, setAutoRotate] = useState(false);
 
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
   const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
@@ -471,8 +480,42 @@ function AdminView({ data, user, refresh }: any) {
   const confirmAssign = async () => {
     setShowConfirmModal(false);
     
-    if (editingAssignment) {
-      // Update existing assignment
+    // Automation: If SDP or DELTA, split into individual days with rotation
+    if (assignTask === 'SDP' || assignTask === 'DELTA') {
+      if (editingAssignment) {
+        await getSb().from('assignment_employees').delete().eq('assignment_id', editingAssignment.id);
+        await getSb().from('assignments').delete().eq('id', editingAssignment.id);
+      }
+
+      let curr = new Date(dutyFrom + 'T00:00:00');
+      const end = new Date(dutyTo + 'T00:00:00');
+      let index = 0;
+
+      while (curr <= end) {
+        const ds = formatDate(curr);
+        const currentTask = index % 2 === 0 ? assignTask : (assignTask === 'SDP' ? 'DELTA' : 'SDP');
+        const isAuto = index > 0;
+
+        const { data: res, error } = await getSb().from('assignments').insert({
+          task_name: currentTask,
+          duty_from: ds,
+          duty_to: ds,
+          added_by: isAuto ? `${user.name} (Auto)` : user.name
+        }).select('id').single();
+
+        if (!error && res) {
+          const rows = selectedEmployees.map(e => ({ assignment_id: res.id, employee_name: e }));
+          await getSb().from('assignment_employees').insert(rows);
+        }
+
+        curr.setDate(curr.getDate() + 1);
+        index++;
+      }
+      
+      resetForm();
+      refresh();
+    } else if (editingAssignment) {
+      // Update existing assignment (Normal)
       const { error } = await getSb().from('assignments').update({
         task_name: assignTask,
         duty_from: dutyFrom,
@@ -481,19 +524,17 @@ function AdminView({ data, user, refresh }: any) {
 
       if (error) { alert(error.message); return; }
 
-      // Update employees (delete then re-insert is simplest)
       await getSb().from('assignment_employees').delete().eq('assignment_id', editingAssignment.id);
       const rows = selectedEmployees.map(e => ({ assignment_id: editingAssignment.id, employee_name: e }));
       const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
       
       if (e2) alert(e2.message);
       else { 
-        setEditingAssignment(null);
         resetForm();
         refresh(); 
       }
     } else {
-      // Create new assignment
+      // Create new assignment (Normal)
       const { data: res, error } = await getSb().from('assignments').insert({
         task_name: assignTask,
         duty_from: dutyFrom,
@@ -506,33 +547,8 @@ function AdminView({ data, user, refresh }: any) {
       const rows = selectedEmployees.map(e => ({ assignment_id: res.id, employee_name: e }));
       const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
       
-      if (e2) {
-        alert(e2.message);
-      } else {
-        // Automation: If SDP or DELTA and autoRotate is checked, create next day assignment
-        if (autoRotate && (assignTask === 'SDP' || assignTask === 'DELTA')) {
-          const nextTask = assignTask === 'SDP' ? 'DELTA' : 'SDP';
-          const nextFrom = new Date(dutyTo + 'T00:00:00');
-          nextFrom.setDate(nextFrom.getDate() + 1);
-          const nextTo = new Date(nextFrom);
-          
-          const formatDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-          const nextFromStr = formatDate(nextFrom);
-          const nextToStr = formatDate(nextTo);
-
-          const { data: nextRes, error: nextErr } = await getSb().from('assignments').insert({
-            task_name: nextTask,
-            duty_from: nextFromStr,
-            duty_to: nextToStr,
-            added_by: `${user.name} (Auto)`
-          }).select('id').single();
-
-          if (!nextErr) {
-            const nextRows = selectedEmployees.map(e => ({ assignment_id: nextRes.id, employee_name: e }));
-            await getSb().from('assignment_employees').insert(nextRows);
-          }
-        }
-
+      if (e2) alert(e2.message);
+      else {
         resetForm();
         refresh(); 
       }
@@ -569,6 +585,9 @@ function AdminView({ data, user, refresh }: any) {
   };
 
   const filteredHistory = data.assignments.filter((a: any) => {
+    const yesterday = getYesterdayStr();
+    if (a.dutyTo < yesterday) return false;
+
     const overlaps = (f: string, t: string, af: string, at: string) => {
       if (f && at < f) return false;
       if (t && af > t) return false;
@@ -676,28 +695,20 @@ function AdminView({ data, user, refresh }: any) {
                 {data.tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            {(assignTask === 'SDP' || assignTask === 'DELTA') && (
-              <div className="flex items-center gap-2 px-1">
-                <input 
-                  type="checkbox" 
-                  id="autoRotate" 
-                  checked={autoRotate} 
-                  onChange={e => setAutoRotate(e.target.checked)}
-                  className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg)] text-[var(--accent)]"
-                />
-                <label htmlFor="autoRotate" className="text-xs text-[var(--muted)] hover:text-[var(--text)] cursor-pointer select-none">
-                  Auto-rotate to {assignTask === 'SDP' ? 'DELTA' : 'SDP'} on the next day
-                </label>
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty From</label>
-                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none" />
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
+                  <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] pl-10 pr-4 py-3 text-sm outline-none" />
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty To</label>
-                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none" />
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
+                  <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] pl-10 pr-4 py-3 text-sm outline-none" />
+                </div>
               </div>
             </div>
           </div>
@@ -831,11 +842,17 @@ function AdminView({ data, user, refresh }: any) {
         <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">From</label>
-            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36" />
+            <div className="relative">
+              <Calendar size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
+              <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg pl-8 pr-3 py-2 text-xs outline-none w-36" />
+            </div>
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">To</label>
-            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36" />
+            <div className="relative">
+              <Calendar size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
+              <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg pl-8 pr-3 py-2 text-xs outline-none w-36" />
+            </div>
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">Task</label>
@@ -1213,11 +1230,12 @@ function ScheduleView({ data, user, refresh }: any) {
             </div>
           )}
         </div>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
+        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-1">
+          <Calendar size={16} className="text-white ml-2" />
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
+          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)] ml-1"><ChevronLeft size={20} /></button>
           <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-sm font-mono px-2 outline-none" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
@@ -2233,7 +2251,8 @@ function LeaveView({ data, user, refresh }: any) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-serif text-3xl">Pre-Approved Leaves</h2>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
+        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
+          <Calendar size={16} className="text-white ml-1" />
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -2338,9 +2357,10 @@ function SkillsView({ user }: any) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 text-white">
         <h2 className="font-serif text-3xl">Soft Skills Training</h2>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
+        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
+          <Calendar size={16} className="text-white ml-1" />
           <button onClick={() => setCurYear(y => y - 1)} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
           <span className="flex items-center px-4 font-mono text-sm">{curYear}</span>
           <button onClick={() => setCurYear(y => y + 1)} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
@@ -2388,8 +2408,8 @@ function SkillsView({ user }: any) {
 
 function NotesView({ user }: any) {
   const SECTIONS = [
-    { id: 'shift63', label: 'Schedule Notes', sub: '6:00AM - 3:00PM / 8:00AM - 5:00PM Logs', icon: <Calendar size={18} /> },
-    { id: 'graveyard', label: 'Schedule Notes', sub: '10:00PM - 6:00AM Logs', icon: <Calendar size={18} /> },
+    { id: 'shift63', label: 'Schedule Notes', sub: '6:00AM - 3:00PM / 8:00AM - 5:00PM Logs', icon: <Calendar size={18} className="text-white" /> },
+    { id: 'graveyard', label: 'Schedule Notes', sub: '10:00PM - 6:00AM Logs', icon: <Calendar size={18} className="text-white" /> },
     { id: 'paypro', label: 'PayPro & Batch', sub: 'Assignment logs', icon: <Archive size={18} /> }
   ];
 
