@@ -248,7 +248,7 @@ export default function App() {
         </div>
       </div>
 
-      <main className={`mx-auto p-4 sm:p-8 ${activeTab === 'schedule' ? 'max-w-full' : 'max-w-7xl'}`}>
+      <main className={`mx-auto p-4 sm:p-8 ${(activeTab === 'schedule' || activeTab === 'notes') ? 'max-w-full' : 'max-w-7xl'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -2603,15 +2603,21 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
 
   const PRESET_COLORS = [
     { name: 'None', value: '' },
-    { name: 'Yellow', value: 'rgba(234, 179, 8, 0.2)' },
-    { name: 'Red', value: 'rgba(239, 68, 68, 0.2)' },
-    { name: 'Green', value: 'rgba(16, 185, 129, 0.2)' },
-    { name: 'Purple', value: 'rgba(168, 85, 247, 0.2)' },
-    { name: 'Cyan', value: 'rgba(6, 182, 212, 0.2)' },
-    { name: 'Orange', value: 'rgba(249, 115, 22, 0.2)' },
-    { name: 'Blue', value: 'rgba(59, 130, 246, 0.2)' },
-    { name: 'Pink', value: 'rgba(236, 72, 153, 0.2)' },
-    { name: 'Gray', value: 'rgba(156, 163, 175, 0.2)' },
+    { name: 'Yellow', value: 'rgba(234, 179, 8, 0.3)' },
+    { name: 'Red', value: 'rgba(239, 68, 68, 0.3)' },
+    { name: 'Green', value: 'rgba(16, 185, 129, 0.3)' },
+    { name: 'Purple', value: 'rgba(168, 85, 247, 0.3)' },
+    { name: 'Cyan', value: 'rgba(6, 182, 212, 0.3)' },
+    { name: 'Orange', value: 'rgba(249, 115, 22, 0.3)' },
+    { name: 'Blue', value: 'rgba(59, 130, 246, 0.3)' },
+    { name: 'Pink', value: 'rgba(236, 72, 153, 0.3)' },
+    { name: 'Indigo', value: 'rgba(99, 102, 241, 0.3)' },
+    { name: 'Teal', value: 'rgba(20, 184, 166, 0.3)' },
+    { name: 'Lime', value: 'rgba(132, 204, 22, 0.3)' },
+    { name: 'Amber', value: 'rgba(245, 158, 11, 0.3)' },
+    { name: 'Rose', value: 'rgba(244, 63, 94, 0.3)' },
+    { name: 'Slate', value: 'rgba(71, 85, 105, 0.5)' },
+    { name: 'Gray', value: 'rgba(156, 163, 175, 0.3)' },
   ];
 
   return (
@@ -2620,7 +2626,7 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
         {index + 1}
       </td>
       <td 
-        className="border-r border-b border-[var(--border)] p-0 relative group/name"
+        className="border-r border-b border-[var(--border)] p-0 relative group/name w-64 min-w-[200px]"
         style={{ backgroundColor: nameColor || 'transparent' }}
       >
         <input 
@@ -2642,7 +2648,7 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
         {!readonly && activePicker?.ci === 'name' && (
           <>
             <div className="fixed inset-0 z-[60]" onClick={() => setActivePicker(null)} />
-            <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1 w-24">
+            <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1.5 w-44">
               {PRESET_COLORS.map(c => (
                 <button
                   key={c.name}
@@ -2687,7 +2693,7 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
             {!readonly && activePicker?.ci === ci && (
               <>
                 <div className="fixed inset-0 z-[60]" onClick={() => setActivePicker(null)} />
-                <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1 w-24">
+                <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1.5 w-44">
                   {PRESET_COLORS.map(c => (
                     <button
                       key={c.name}
