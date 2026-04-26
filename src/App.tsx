@@ -580,6 +580,15 @@ function AdminView({ data, user, refresh }: any) {
     return true;
   });
 
+  const deleteAssignment = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this assignment?')) return;
+    const { error: e1 } = await getSb().from('assignment_employees').delete().eq('assignment_id', id);
+    if (e1) { alert(e1.message); return; }
+    const { error: e2 } = await getSb().from('assignments').delete().eq('id', id);
+    if (e2) alert(e2.message);
+    else refresh();
+  };
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -644,15 +653,6 @@ function AdminView({ data, user, refresh }: any) {
             </p>
           </div>
           <div className="flex gap-2">
-            {!editingAssignment && (
-              <button 
-                onClick={() => setShowBulkTaskModal(true)}
-                className="text-xs font-bold text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-4 py-2 rounded-xl hover:bg-[var(--accent)]/10 flex items-center gap-2"
-              >
-                <Zap size={14} />
-                Bulk Assign Tool
-              </button>
-            )}
             {editingAssignment && (
               <button 
                 onClick={resetForm}
@@ -886,13 +886,23 @@ function AdminView({ data, user, refresh }: any) {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[11px] text-[var(--accent)] font-mono">{a.addedBy}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => handleEdit(a)}
-                      className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Settings size={16} />
-                    </button>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleEdit(a)}
+                        className="p-2 hover:bg-[var(--accent)]/10 rounded-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
+                        title="Edit Assignment"
+                      >
+                        <Settings size={16} />
+                      </button>
+                      <button 
+                        onClick={() => deleteAssignment(a.id)}
+                        className="p-2 hover:bg-red-500/10 rounded-lg text-[var(--muted)] hover:text-red-500 transition-colors"
+                        title="Delete Assignment"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -968,7 +978,7 @@ function TaskView({ data, user }: any) {
                   <div className="flex-1 min-w-0">
                     <div className="text-lg font-bold truncate">{a.task}</div>
                     <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-[var(--muted)]">
-                      <Calendar size={12} />
+                      <Calendar size={12} className="text-white" />
                       {a.dutyFrom} → {a.dutyTo}
                     </div>
                   </div>
