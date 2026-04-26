@@ -1478,6 +1478,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   };
 
   const checkConflict = (emp: string) => {
+    if (mode === 'paypro') return false;
     if (mode === 'dayoff') {
       // 1. Conflict if they have a DIFFERENT leave type on the target dates (activeDates).
       const hasOtherLeave = activeDates.some(d => 
