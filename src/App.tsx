@@ -1435,8 +1435,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       return false;
     }
 
-    if (mode === 'shift') {
-      if (!shiftId) return false;
+    if (mode === 'shift' || mode === 'paypro') {
       return activeDates.some(d => {
         const hasShift = scheduleEntries.some((s: any) => 
           s.employee_name === emp && s.schedule_date === d
@@ -1635,9 +1634,9 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
                           : isAssigned 
-                            ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.5]'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
                             : mode === 'shift'
-                              ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400/90 hover:border-cyan-500/50 hover:bg-cyan-500/10'
+                              ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
                               : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
                     >
