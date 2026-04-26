@@ -50,6 +50,16 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const getTodayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const getMonthStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Connecting...');
@@ -416,8 +426,8 @@ function AdminView({ data, user, refresh }: any) {
   const [taskName, setTaskName] = useState('');
   
   const [assignTask, setAssignTask] = useState('');
-  const [dutyFrom, setDutyFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [dutyTo, setDutyTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dutyFrom, setDutyFrom] = useState(getTodayStr());
+  const [dutyTo, setDutyTo] = useState(getTodayStr());
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
   
@@ -500,12 +510,13 @@ function AdminView({ data, user, refresh }: any) {
         // Automation: If SDP or DELTA and autoRotate is checked, create next day assignment
         if (autoRotate && (assignTask === 'SDP' || assignTask === 'DELTA')) {
           const nextTask = assignTask === 'SDP' ? 'DELTA' : 'SDP';
-          const nextFrom = new Date(dutyTo);
+          const nextFrom = new Date(dutyTo + 'T00:00:00');
           nextFrom.setDate(nextFrom.getDate() + 1);
           const nextTo = new Date(nextFrom);
           
-          const nextFromStr = nextFrom.toISOString().slice(0, 10);
-          const nextToStr = nextTo.toISOString().slice(0, 10);
+          const formatDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          const nextFromStr = formatDate(nextFrom);
+          const nextToStr = formatDate(nextTo);
 
           const { data: nextRes, error: nextErr } = await getSb().from('assignments').insert({
             task_name: nextTask,
@@ -528,8 +539,8 @@ function AdminView({ data, user, refresh }: any) {
 
   const resetForm = () => {
     setAssignTask('');
-    setDutyFrom(new Date().toISOString().slice(0, 10));
-    setDutyTo(new Date().toISOString().slice(0, 10));
+    setDutyFrom(getTodayStr());
+    setDutyTo(getTodayStr());
     setSelectedEmployees([]);
     setEditingAssignment(null);
   };
@@ -860,7 +871,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 function TaskView({ data, user }: any) {
   const [filter, setFilter] = useState<'current' | 'history'>('current');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayStr();
   
   const tasks = data.assignments.filter((a: any) => {
     if (filter === 'current') return a.dutyTo >= today;
@@ -949,7 +960,7 @@ function TaskView({ data, user }: any) {
 }
 
 function ScheduleView({ data, user, refresh }: any) {
-  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [currentMonth, setCurrentMonth] = useState(getMonthStr());
   const [selectedCell, setSelectedCell] = useState<{ date: string; shiftId?: number; leaveType?: string } | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -1023,25 +1034,9 @@ function ScheduleView({ data, user, refresh }: any) {
   };
 
   const handleBulkSave = async (params: any) => {
-    const { selectedEmps, shiftId, leaveType, isPayPro, startDate, endDate, weekdays } = params;
+    const { selectedEmps, shiftId, leaveType, isPayPro, activeDates } = params;
+    const datesInRange = activeDates || [];
     
-    // Generate dates in YYYY-MM-DD format safely
-    const datesInRange: string[] = [];
-    let curr = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    
-    while (curr <= end) {
-      const year = curr.getFullYear();
-      const month = String(curr.getMonth() + 1).padStart(2, '0');
-      const day = String(curr.getDate()).padStart(2, '0');
-      const d = `${year}-${month}-${day}`;
-      
-      if (!weekdays || weekdays.includes(curr.getDay())) {
-        datesInRange.push(d);
-      }
-      curr.setDate(curr.getDate() + 1);
-    }
-
     if (datesInRange.length === 0) return;
 
     try {
@@ -1153,12 +1148,12 @@ function ScheduleView({ data, user, refresh }: any) {
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
-            setCurrentMonth(d.toISOString().slice(0, 7));
+            setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
           }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
           <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-sm font-mono px-2 outline-none" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
-            setCurrentMonth(d.toISOString().slice(0, 7));
+            setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
           }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
         </div>
       </div>
@@ -1176,8 +1171,7 @@ function ScheduleView({ data, user, refresh }: any) {
                     <th className="px-4 py-3 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider border-r border-[var(--border)] w-40">Shift</th>
                     {week.map(d => {
                       const isSun = new Date(d + 'T00:00:00').getDay() === 0;
-                      const now = new Date();
-                      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                      const todayStr = getTodayStr();
                       const isToday = d === todayStr;
                       return (
                         <th key={d} className={`px-4 py-3 border-r border-[var(--border)] min-w-[140px] text-center ${isSun ? 'text-[var(--red)]' : ''} ${isToday ? 'bg-[var(--accent)]/10 text-[var(--accent)] font-bold' : ''}`}>
@@ -1336,8 +1330,6 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       } else {
         setSelectedEmps([]);
       }
-    } else {
-      setSelectedEmps(prev => prev.filter(e => !checkConflict(e)));
     }
   }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length, excludedDates, shiftId]);
 
@@ -1365,9 +1357,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       shiftId: mode === 'shift' ? shiftId : '', 
       leaveType: mode === 'dayoff' ? 'Dayoff' : (mode === 'paypro' ? '' : ''),
       isPayPro: mode === 'paypro',
-      startDate, 
-      endDate,
-      weekdays: mode === 'dayoff' ? selectedWeekdays : null
+      activeDates
     });
   };
 
@@ -1428,8 +1418,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     { label: 'Sun', value: 0 },
   ];
 
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayStr = getTodayStr();
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -1508,13 +1497,6 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     onClick={() => setPeriodType('p2')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >16–{daysInMonth}</button>
-                  {weeks.map((_, i) => (
-                    <button 
-                      key={i}
-                      onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                    >Week {i + 1}</button>
-                  ))}
                 </div>
                 
                 <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
@@ -1602,13 +1584,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                   return (
                     <button 
                       key={e} 
-                      disabled={isAssigned}
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
                       className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
                           : isAssigned 
-                            ? 'bg-red-500/5 border-red-500/10 text-red-500/20 cursor-not-allowed opacity-40'
+                            ? 'bg-red-500/10 border-red-500/30 text-red-500/80 hover:border-red-500/50 hover:bg-red-500/20'
                             : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
                       }`}
                     >
@@ -1666,8 +1647,7 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
 
   const getActiveDates = () => {
     if (periodType === 'p1') return dates.filter(d => Number(d.split('-')[2]) <= 15);
-    if (periodType === 'p2') return dates.filter(d => Number(d.split('-')[2]) > 15);
-    return weeks[selectedWeekIdx] || [];
+    return dates.filter(d => Number(d.split('-')[2]) > 15);
   };
 
   const activeDates = getActiveDates();
@@ -1725,13 +1705,6 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
                 onClick={() => setPeriodType('p2')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
               >16–{daysInMonth}</button>
-              {weeks.map((_, i) => (
-                <button 
-                  key={i}
-                  onClick={() => { setPeriodType('week'); setSelectedWeekIdx(i); }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'week' && selectedWeekIdx === i ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                >Week {i + 1}</button>
-              ))}
             </div>
             <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
               {activeDates.map(d => {
@@ -1869,7 +1842,7 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
 }
 
 function LeaveView({ data, user, refresh }: any) {
-  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [currentMonth, setCurrentMonth] = useState(getMonthStr());
   const [year, month] = currentMonth.split('-').map(Number);
   
   const [empId, setEmpId] = useState('');
@@ -1883,10 +1856,11 @@ function LeaveView({ data, user, refresh }: any) {
     if (!empId || !fromDate || !toDate) return;
     // Generate dates between from and to
     const dates: string[] = [];
-    let curr = new Date(fromDate);
-    const end = new Date(toDate);
+    let curr = new Date(fromDate + 'T00:00:00');
+    const end = new Date(toDate + 'T00:00:00');
     while (curr <= end) {
-      dates.push(curr.toISOString().slice(0, 10));
+      const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+      dates.push(dStr);
       curr.setDate(curr.getDate() + 1);
     }
 
@@ -1918,12 +1892,12 @@ function LeaveView({ data, user, refresh }: any) {
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1">
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
-            setCurrentMonth(d.toISOString().slice(0, 7));
+            setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
           }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
           <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-sm font-mono px-2 outline-none" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
-            setCurrentMonth(d.toISOString().slice(0, 7));
+            setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
           }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
         </div>
       </div>
