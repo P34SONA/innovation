@@ -1241,43 +1241,55 @@ function ScheduleView({ data, user, refresh }: any) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {data.shiftTypes.map((st: any) => (
-                    <tr key={st.id}>
-                      <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold">{st.name}</td>
-                      {week.map(d => {
-                        const emps = getShiftEmployees(d, st.id);
-                        return (
-                          <td key={d} className="p-1 border-r border-[var(--border)] group relative">
-                            <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                              {emps.map(e => {
-                                const isSelf = e === user.name;
-                                return (
-                                  <span 
-                                    key={e} 
-                                    className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
-                                      isSelf 
-                                        ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
-                                        : 'bg-white/5 border-white/10 text-white'
-                                    }`}
+                  {data.shiftTypes.map((st: any) => {
+                    const getShiftColor = (name: string) => {
+                      const n = name.toLowerCase();
+                      if (n.includes('6:00am')) return 'text-[#4fd1c5]'; 
+                      if (n.includes('8:00am')) return 'text-[#e8c547]';
+                      if (n.includes('10:00pm')) return 'text-[#a78bfa]';
+                      if (n.includes('paypro')) return 'text-[#4ade80]';
+                      return 'text-[var(--muted)]';
+                    };
+                    const shiftColor = getShiftColor(st.name);
+                    
+                    return (
+                      <tr key={st.id}>
+                        <td className={`px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold ${shiftColor}`}>{st.name}</td>
+                        {week.map(d => {
+                          const emps = getShiftEmployees(d, st.id);
+                          return (
+                            <td key={d} className="p-1 border-r border-[var(--border)] group relative">
+                              <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
+                                {emps.map(e => {
+                                  const isSelf = e === user.name;
+                                  return (
+                                    <span 
+                                      key={e} 
+                                      className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
+                                        isSelf 
+                                          ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
+                                          : 'bg-white/5 border-white/10 text-white'
+                                      }`}
+                                    >
+                                      {e}
+                                    </span>
+                                  );
+                                })}
+                                {user.isAdmin && (
+                                  <button 
+                                    onClick={() => handleCellClick(d, st.id)}
+                                    className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[2px] transition-opacity"
                                   >
-                                    {e}
-                                  </span>
-                                );
-                              })}
-                              {user.isAdmin && (
-                                <button 
-                                  onClick={() => handleCellClick(d, st.id)}
-                                  className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[2px] transition-opacity"
-                                >
-                                  <Plus size={16} className="text-[var(--accent)]" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                                    <Plus size={16} className="text-[var(--accent)]" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                   <tr className="bg-[var(--surface)]">
                     <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[#f9a8d4]">Day Off</td>
                     {week.map(d => (
