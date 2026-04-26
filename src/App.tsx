@@ -436,6 +436,8 @@ function AdminView({ data, user, refresh }: any) {
   const [autoRotate, setAutoRotate] = useState(false);
 
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
+  const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(getMonthStr());
 
   const addAdmin = async () => {
     if (!adminName.trim()) return;
@@ -641,14 +643,25 @@ function AdminView({ data, user, refresh }: any) {
               {editingAssignment ? `Modifying assignment for ${editingAssignment.task}` : 'Create a new task assignment for a group of employees.'}
             </p>
           </div>
-          {editingAssignment && (
-            <button 
-              onClick={resetForm}
-              className="text-xs font-bold text-[var(--red)] border border-[var(--red)]/30 bg-[var(--red)]/5 px-4 py-2 rounded-xl hover:bg-[var(--red)]/10"
-            >
-              Cancel Edit
-            </button>
-          )}
+          <div className="flex gap-2">
+            {!editingAssignment && (
+              <button 
+                onClick={() => setShowBulkTaskModal(true)}
+                className="text-xs font-bold text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-4 py-2 rounded-xl hover:bg-[var(--accent)]/10 flex items-center gap-2"
+              >
+                <Zap size={14} />
+                Bulk Assign Tool
+              </button>
+            )}
+            {editingAssignment && (
+              <button 
+                onClick={resetForm}
+                className="text-xs font-bold text-[var(--red)] border border-[var(--red)]/30 bg-[var(--red)]/5 px-4 py-2 rounded-xl hover:bg-[var(--red)]/10"
+              >
+                Cancel Edit
+              </button>
+            )}
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -776,6 +789,37 @@ function AdminView({ data, user, refresh }: any) {
             </div>
           </div>
         </div>
+      )}
+
+      {showBulkTaskModal && (
+        <BulkTaskAssignModal 
+          employees={data.employees}
+          tasks={data.tasks}
+          assignments={data.assignments}
+          currentMonth={currentMonth}
+          onClose={() => setShowBulkTaskModal(false)}
+          onSave={async (params: any) => {
+            const { selectedEmps, taskName, startDate, endDate } = params;
+            
+            const { data: res, error } = await getSb().from('assignments').insert({
+              task_name: taskName,
+              duty_from: startDate,
+              duty_to: endDate,
+              added_by: user.name
+            }).select('id').single();
+
+            if (error) { alert(error.message); return; }
+
+            const rows = selectedEmps.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
+            const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
+            
+            if (e2) alert(e2.message);
+            else {
+              setShowBulkTaskModal(false);
+              refresh();
+            }
+          }}
+        />
       )}
 
       <div>
@@ -1050,12 +1094,20 @@ function ScheduleView({ data, user, refresh }: any) {
           if (error) throw error;
         }
       } else if (shiftId) {
-        const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
-          schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
-        })));
-        const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
-        if (error) throw error;
-    } else if (leaveType === 'Dayoff') {
+        // Filter out dates where the employee has a 'Dayoff'
+        const rows = selectedEmps.flatMap((emp: string) => 
+          datesInRange
+            .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff'))
+            .map(d => ({
+              schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
+            }))
+        );
+        
+        if (rows.length > 0) {
+          const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+          if (error) throw error;
+        }
+      } else if (leaveType === 'Dayoff') {
       // Source of truth: For the selected dates, the selection state is final.
       // First, clear existing entries for these dates for ALL employees
       await getSb().from('schedule_entries').delete().in('employee_name', data.employees).in('schedule_date', datesInRange);
@@ -1338,37 +1390,6 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     setExcludedDates([]);
   }, [mode, periodType, selectedWeekIdx]);
 
-  // Auto-exclude Dayoff dates when employees are selected in shift mode
-  useEffect(() => {
-    if (mode === 'shift' && shiftId && selectedEmps.length > 0) {
-      let baseDates: string[] = [];
-      if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
-      else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
-      else baseDates = weeks[selectedWeekIdx] || [];
-
-      const currentExclusions = new Set(excludedDates);
-      let changed = false;
-
-      selectedEmps.forEach(emp => {
-        baseDates.forEach(d => {
-          const hasDayOff = leaveEntries.some((l: any) => 
-            l.employee_name === emp && 
-            l.schedule_date === d && 
-            l.leave_type === 'Dayoff'
-          );
-          if (hasDayOff && !currentExclusions.has(d)) {
-            currentExclusions.add(d);
-            changed = true;
-          }
-        });
-      });
-
-      if (changed) {
-        setExcludedDates(Array.from(currentExclusions));
-      }
-    }
-  }, [selectedEmps, shiftId, mode, periodType, selectedWeekIdx, leaveEntries, dates, excludedDates]);
-
   const handleSave = () => {
     if (selectedEmps.length === 0) {
       alert('Please select employees.');
@@ -1449,95 +1470,88 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     { label: 'Sun', value: 0 },
   ];
 
-  const todayStr = getTodayStr();
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#1a1d24] border border-[#2d3139] rounded-[32px] p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[95vh] relative">
-        <button onClick={onClose} className="absolute right-6 top-6 text-gray-500 hover:text-white"><X size={24} /></button>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-[var(--text)]">
+      <div className="bg-[#1a1d24] border border-[#2d3139] rounded-[32px] p-6 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh] relative">
+        <button onClick={onClose} className="absolute right-6 top-6 text-gray-500 hover:text-white"><X size={20} /></button>
         
-        <div className="flex items-center gap-3 mb-2">
-          <Users size={24} className="text-[var(--accent)]" />
-          <h3 className="font-serif text-3xl">Bulk Assign</h3>
+        <div className="flex items-center gap-2 mb-1">
+          <Users size={20} className="text-[var(--accent)]" />
+          <h3 className="font-serif text-2xl">Bulk Assign</h3>
         </div>
-        <p className="text-sm text-gray-400 mb-8">Assign employees to a shift — select a period and specific days.</p>
+        <p className="text-[10px] text-gray-500 mb-6 uppercase tracking-wider font-bold">Assign team shifts — choose period & days.</p>
 
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-2 mb-4">
           <button 
             onClick={() => setMode('shift')}
             className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'shift' ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Clock size={16} className="mb-1" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Shift</span>
+            <Clock size={16} className="mb-0.5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest leading-none">Shift</span>
           </button>
           <button 
             onClick={() => setMode('paypro')}
             className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'paypro' ? 'bg-orange-500/10 border-orange-500 text-orange-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Zap size={16} className="mb-1" />
-            <span className="text-center text-[9px] font-bold uppercase tracking-tight leading-tight">PayPro & Batch<br/>Upload</span>
+            <Zap size={16} className="mb-0.5" />
+            <span className="text-center text-[8px] font-bold uppercase tracking-tight leading-tight">PayPro</span>
           </button>
           <button 
             onClick={() => setMode('dayoff')}
             className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'dayoff' ? 'bg-pink-500/10 border-pink-500 text-pink-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Moon size={16} className="mb-1" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Day Off</span>
+            <Moon size={16} className="mb-0.5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest leading-none">Day Off</span>
           </button>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">
+            <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">
               1. {mode === 'dayoff' ? 'Select Days (Mon-Sun)' : 'Select Period'}
             </label>
             
             {mode === 'dayoff' ? (
-              <div className="flex flex-wrap gap-2">
-                {WEEKDAYS.map(day => {
-                  const hasConflict = activeDates.length > 0 && activeDates.some(d => 
-                    leaveEntries.some((l: any) => l.schedule_date === d && l.leave_type !== 'Dayoff')
-                  );
-                  return (
-                    <button 
-                      key={day.value}
-                      onClick={() => {
-                        setSelectedWeekdays(prev => 
-                          prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
-                        );
-                      }}
-                      className={`px-4 py-3 rounded-xl text-xs font-bold border transition-all flex-1 min-w-[80px] ${
-                        selectedWeekdays.includes(day.value) 
-                          ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' 
-                          : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
-                      }`}
-                    >
-                      {day.label}
-                    </button>
-                  );
-                })}
+              <div className="flex flex-wrap gap-1.5">
+                {WEEKDAYS.map(day => (
+                  <button 
+                    key={day.value}
+                    onClick={() => {
+                      setSelectedWeekdays(prev => 
+                        prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
+                      );
+                    }}
+                    className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition-all flex-1 min-w-[70px] ${
+                      selectedWeekdays.includes(day.value) 
+                        ? 'bg-pink-500 text-white border-pink-500 shadow-md' 
+                        : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap gap-2 mb-4">
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   <button 
                     onClick={() => setPeriodType('p1')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >1–15</button>
                   <button 
                     onClick={() => setPeriodType('p2')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >16–{daysInMonth}</button>
                 </div>
                 
-                <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
+                <div className="flex flex-wrap gap-1.5 p-3 bg-gray-900/50 rounded-2xl border border-gray-800/50">
                   {(() => {
                     let baseDates: string[] = [];
                     if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
                     else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
                     else baseDates = weeks[selectedWeekIdx] || [];
 
-                    if (baseDates.length === 0) return <div className="text-[10px] text-gray-600 italic py-1">No days selected in the period.</div>;
+                    if (baseDates.length === 0) return <div className="text-[9px] text-gray-600 italic">No days selected.</div>;
                     
                     return baseDates.map(d => {
                       const dateNum = Number(d.split('-')[2]);
@@ -1554,18 +1568,18 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
                             );
                           }}
-                          className={`flex flex-col items-center px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${
+                          className={`flex flex-col items-center px-2 py-1 rounded-xl border text-[9px] font-bold transition-all ${
                             isExcluded 
-                              ? 'border-gray-800 bg-gray-900/50 text-gray-700 opacity-40 shadow-inner' 
+                              ? 'border-gray-800 bg-gray-900/50 text-gray-700 opacity-40' 
                               : isSun 
-                                ? 'border-red-500/30 bg-red-500/5 text-red-400 hover:border-red-500/50' 
+                                ? 'border-red-500/30 bg-red-500/5 text-red-400' 
                                 : isSat 
-                                  ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400 hover:border-cyan-500/50' 
-                                  : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600 hover:bg-gray-800/60'
+                                  ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
+                                  : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
                           }`}
                         >
                           <span className="opacity-60">{dayName}</span>
-                          <span className="text-xs">{dateNum}</span>
+                          <span className="text-[11px]">{dateNum}</span>
                         </button>
                       );
                     });
@@ -1577,11 +1591,11 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
           {mode === 'shift' && (
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">2. Shift Type</label>
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">2. Shift Type</label>
               <select 
                 value={shiftId} 
                 onChange={e => setShiftId(e.target.value)}
-                className="w-full bg-[#0d0f14] border border-gray-700 rounded-2xl px-5 py-4 text-sm outline-none focus:border-[var(--accent)] shadow-inner transition-colors"
+                className="w-full bg-[#0d0f14] border border-gray-700 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-[var(--accent)] transition-colors"
               >
                 <option value="">— Choose shift —</option>
                 {shiftTypes.filter((st:any) => st.name !== 'PayPro & Batch Upload').map((st: any) => (
@@ -1592,19 +1606,19 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
           )}
 
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">{mode === 'shift' ? '3' : '2'}. Select Employees</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500">{mode === 'shift' ? '3' : '2'}. Select Employees</label>
               <div className="relative">
                 <input 
                   type="text" 
                   placeholder="Search..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="bg-transparent border-b border-gray-700 px-2 py-1 text-xs outline-none focus:border-[var(--accent)] w-32"
+                  className="bg-transparent border-b border-gray-700 px-2 py-0.5 text-[10px] outline-none focus:border-[var(--accent)] w-24"
                 />
               </div>
             </div>
-            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar rounded-2xl transition-colors ${mode === 'dayoff' ? 'bg-pink-500/5 border border-pink-500/10' : ''}`}>
+            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 p-1.5 max-h-48 overflow-y-auto custom-scrollbar rounded-xl transition-colors ${mode === 'dayoff' ? 'bg-pink-500/5 border border-pink-500/10' : ''}`}>
               {employees
                 .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
                 .sort()
@@ -1616,18 +1630,18 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     <button 
                       key={e} 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-semibold transition-all ${
                         isSelected 
-                          ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
+                          ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
                           : isAssigned 
-                            ? 'bg-red-500/10 border-red-500/30 text-red-500/80 hover:border-red-500/50 hover:bg-red-500/20'
+                            ? 'bg-red-500/10 border-red-500/30 text-red-500/80 hover:border-red-500/50'
                             : mode === 'shift' && shiftId
-                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/20'
-                              : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
+                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50'
+                              : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
                     >
-                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
-                        {isSelected && <Check size={12} strokeWidth={3} />}
+                      <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
+                        {isSelected && <Check size={10} strokeWidth={3} />}
                       </div>
                       <span className="flex-1 text-left truncate">{e}</span>
                     </button>
@@ -1637,18 +1651,161 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
           </div>
         </div>
 
-        <div className="flex gap-4 mt-10">
+        <div className="flex gap-2 mt-4">
           <button 
             onClick={onClose} 
-            className="flex-1 bg-gray-800/40 border border-gray-700 py-4 rounded-2xl text-sm font-bold text-gray-400 hover:bg-gray-800 hover:border-gray-600 transition-all"
+            className="flex-1 bg-gray-800/40 border border-gray-700 py-2.5 rounded-xl text-[10px] font-bold text-gray-400 hover:bg-gray-800 transition-all uppercase tracking-wider"
           >
             Cancel
           </button>
           <button 
             onClick={handleSave} 
-            className="flex-1 bg-[var(--accent)] text-black py-4 rounded-2xl text-sm font-bold shadow-xl shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95"
+            className="flex-1 bg-[var(--accent)] text-black py-2.5 rounded-xl text-[10px] font-bold shadow-lg shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95 uppercase tracking-wider"
           >
-            Assign
+            Apply Assignment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, currentMonth }: any) {
+  const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
+  const [taskName, setTaskName] = useState('');
+  const [periodType, setPeriodType] = useState<'p1' | 'p2'>('p1');
+  const [search, setSearch] = useState('');
+
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const dates = Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`);
+
+  const activeDates = periodType === 'p1' 
+    ? dates.filter(d => Number(d.split('-')[2]) <= 15)
+    : dates.filter(d => Number(d.split('-')[2]) > 15);
+
+  const startDate = activeDates[0] || '';
+  const endDate = activeDates[activeDates.length - 1] || '';
+
+  const checkConflict = (emp: string) => {
+    if (!taskName) return null;
+    if (taskName !== 'SDP' && taskName !== 'DELTA') return null;
+
+    const conflict = assignments.find((a: any) => {
+      if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+      if (!a.employees.includes(emp)) return false;
+      return (startDate <= a.dutyTo && endDate >= a.dutyFrom);
+    });
+    return conflict ? conflict.task : null;
+  };
+
+  const handleSave = () => {
+    if (selectedEmps.length === 0 || !taskName) {
+      alert('Please select task and employees');
+      return;
+    }
+    onSave({ selectedEmps, taskName, startDate, endDate });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-[var(--text)]">
+      <div className="bg-[#1a1d24] border border-[#2d3139] rounded-[32px] p-6 w-full max-w-xl shadow-2xl overflow-y-auto max-h-[90vh] relative">
+        <button onClick={onClose} className="absolute right-6 top-6 text-gray-500 hover:text-white"><X size={20} /></button>
+        
+        <div className="flex items-center gap-2 mb-1">
+          <Zap size={20} className="text-[var(--accent)]" />
+          <h3 className="font-serif text-2xl">Bulk Task Assignment</h3>
+        </div>
+        <p className="text-[10px] text-gray-500 mb-6 uppercase tracking-wider font-bold">Assign tasks for the entire period.</p>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">1. Select Period</label>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setPeriodType('p1')}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >
+                1st Half (1–15)
+              </button>
+              <button 
+                onClick={() => setPeriodType('p2')}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+              >
+                2nd Half (16–{daysInMonth})
+              </button>
+            </div>
+            <div className="mt-2 p-3 bg-gray-900/50 rounded-xl border border-gray-800/50 text-[11px] text-[var(--muted)] font-mono text-center">
+              Selected: <span className="text-[var(--accent)]">{startDate}</span> to <span className="text-[var(--accent)]">{endDate}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">2. Select Task</label>
+            <select 
+              value={taskName} 
+              onChange={e => setTaskName(e.target.value)}
+              className="w-full bg-[#0d0f14] border border-gray-700 rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--accent)] transition-colors"
+            >
+              <option value="">— Choose task type —</option>
+              {tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500">3. Select Employees</label>
+              <input 
+                type="text" 
+                placeholder="Search..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="bg-transparent border-b border-gray-700 px-2 py-0.5 text-[10px] outline-none focus:border-[var(--accent)] w-32"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 p-1.5 max-h-48 overflow-y-auto custom-scrollbar bg-gray-900/30 rounded-xl border border-gray-800">
+              {employees
+                .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
+                .sort()
+                .map((e: string) => {
+                  const conflict = checkConflict(e);
+                  const isSelected = selectedEmps.includes(e);
+
+                  return (
+                    <button 
+                      key={e} 
+                      onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-semibold transition-all ${
+                        isSelected 
+                          ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
+                          : conflict 
+                            ? 'bg-red-500/10 border-red-500/30 text-red-500/50 cursor-not-allowed'
+                            : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
+                      }`}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
+                        {isSelected && <Check size={10} strokeWidth={3} />}
+                      </div>
+                      <span className="flex-1 text-left truncate">{e} {conflict && `(${conflict})`}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-8">
+          <button 
+            onClick={onClose} 
+            className="flex-1 bg-gray-800/40 border border-gray-700 py-3 rounded-xl text-[10px] font-bold text-gray-400 hover:bg-gray-800 transition-all uppercase tracking-wider"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            className="flex-1 bg-[var(--accent)] text-black py-3 rounded-xl text-[10px] font-bold shadow-lg shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95 uppercase tracking-wider"
+          >
+            Process Bulk Task
           </button>
         </div>
       </div>
