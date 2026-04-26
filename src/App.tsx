@@ -18,6 +18,8 @@ import {
   Clock,
   Zap,
   Moon,
+  Palette,
+  PaintBucket,
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -2447,7 +2449,7 @@ function SpreadsheetPanel({ section, user }: any) {
     
     const displayRows = Array.from({ length: Math.max(minRows, count) }, (_, i) => {
       const existing = initialRows.find((r: any) => r.row_idx === i);
-      return existing || { row_idx: i, row_data: { name: '', cols: Array(7).fill('') } };
+      return existing || { row_idx: i, row_data: { name: '', nameColor: '', cols: Array(7).fill(''), colors: Array(7).fill('') } };
     });
     
     setRows(displayRows);
@@ -2458,20 +2460,20 @@ function SpreadsheetPanel({ section, user }: any) {
     fetchRows();
   }, [fetchRows]);
 
-  const updateRow = async (idx: number, name: string, cols: string[]) => {
+  const updateRow = async (idx: number, name: string, cols: string[], colors: string[], nameColor: string) => {
     if (!user.isAdmin) return;
     
     // Update local state first
     setRows(prev => {
       const next = [...prev];
-      next[idx] = { ...next[idx], row_data: { name, cols } };
+      next[idx] = { ...next[idx], row_data: { name, cols, colors, nameColor } };
       return next;
     });
 
     const { error } = await getSb().from('notes').upsert({
       section_key: section.id,
       row_idx: idx,
-      row_data: { name, cols }
+      row_data: { name, cols, colors, nameColor }
     }, { onConflict: 'section_key,row_idx' });
     
     if (error) console.error(error);
@@ -2481,7 +2483,7 @@ function SpreadsheetPanel({ section, user }: any) {
     const startIdx = rows.length;
     const newRows = Array.from({ length: 5 }, (_, i) => ({
       row_idx: startIdx + i,
-      row_data: { name: '', cols: Array(7).fill('') }
+      row_data: { name: '', nameColor: '', cols: Array(7).fill(''), colors: Array(7).fill('') }
     }));
     setRows([...rows, ...newRows]);
   };
@@ -2532,7 +2534,7 @@ function SpreadsheetPanel({ section, user }: any) {
                 index={i} 
                 data={r.row_data} 
                 readonly={!user.isAdmin} 
-                onUpdate={(name: string, cols: string[]) => updateRow(i, name, cols)} 
+                onUpdate={(name: string, cols: string[], colors: string[], nameColor: string) => updateRow(i, name, cols, colors, nameColor)} 
               />
             ))}
           </tbody>
@@ -2544,16 +2546,26 @@ function SpreadsheetPanel({ section, user }: any) {
 
 function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
   const [name, setName] = useState(data?.name || '');
+  const [nameColor, setNameColor] = useState(data?.nameColor || '');
   const [cols, setCols] = useState(data?.cols || Array(7).fill(''));
+  const [colors, setColors] = useState(data?.colors || Array(7).fill(''));
+  const [activePicker, setActivePicker] = useState<{ ci: number | 'name' } | null>(null);
 
   useEffect(() => {
     setName(data?.name || '');
+    setNameColor(data?.nameColor || '');
     setCols(data?.cols || Array(7).fill(''));
+    setColors(data?.colors || Array(7).fill(''));
   }, [data]);
 
   const handleBlur = () => {
-    if (name !== data.name || JSON.stringify(cols) !== JSON.stringify(data.cols)) {
-      onUpdate(name, cols);
+    if (
+      name !== data.name || 
+      nameColor !== data.nameColor || 
+      JSON.stringify(cols) !== JSON.stringify(data.cols) || 
+      JSON.stringify(colors) !== JSON.stringify(data.colors)
+    ) {
+      onUpdate(name, cols, colors, nameColor);
     }
   };
 
@@ -2563,24 +2575,54 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
     setCols(next);
   };
 
-  const getCellColor = (val: string) => {
+  const updateColor = (idx: number | 'name', color: string) => {
+    if (idx === 'name') {
+      setNameColor(color);
+      onUpdate(name, cols, colors, color);
+    } else {
+      const next = [...colors];
+      next[idx] = color;
+      setColors(next);
+      onUpdate(name, cols, next, nameColor);
+    }
+    setActivePicker(null);
+  };
+
+  const getCellColor = (val: string, customColor: string) => {
+    if (customColor) return customColor;
     if (!val) return '';
     const lower = val.toLowerCase();
-    if (lower.includes('jan')) return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
-    if (lower.includes('feb')) return 'bg-red-500/20 text-red-300 border-red-500/30';
-    if (lower.includes('march')) return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-    if (lower.includes('april')) return 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-    if (lower.includes('may')) return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
-    if (lower.includes('june')) return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
+    if (lower.includes('jan')) return 'rgba(234, 179, 8, 0.2)';
+    if (lower.includes('feb')) return 'rgba(239, 68, 68, 0.2)';
+    if (lower.includes('march')) return 'rgba(16, 185, 129, 0.2)';
+    if (lower.includes('april')) return 'rgba(168, 85, 247, 0.2)';
+    if (lower.includes('may')) return 'rgba(6, 182, 212, 0.2)';
+    if (lower.includes('june')) return 'rgba(249, 115, 22, 0.2)';
     return '';
   };
+
+  const PRESET_COLORS = [
+    { name: 'None', value: '' },
+    { name: 'Yellow', value: 'rgba(234, 179, 8, 0.2)' },
+    { name: 'Red', value: 'rgba(239, 68, 68, 0.2)' },
+    { name: 'Green', value: 'rgba(16, 185, 129, 0.2)' },
+    { name: 'Purple', value: 'rgba(168, 85, 247, 0.2)' },
+    { name: 'Cyan', value: 'rgba(6, 182, 212, 0.2)' },
+    { name: 'Orange', value: 'rgba(249, 115, 22, 0.2)' },
+    { name: 'Blue', value: 'rgba(59, 130, 246, 0.2)' },
+    { name: 'Pink', value: 'rgba(236, 72, 153, 0.2)' },
+    { name: 'Gray', value: 'rgba(156, 163, 175, 0.2)' },
+  ];
 
   return (
     <tr className="group transition-colors h-9">
       <td className="text-center font-mono text-[10px] text-[var(--muted)] border-r border-b border-[var(--border)] bg-[#161820]/50 group-hover:bg-[#20232d] transition-colors">
         {index + 1}
       </td>
-      <td className="border-r border-b border-[var(--border)] p-0">
+      <td 
+        className="border-r border-b border-[var(--border)] p-0 relative group/name"
+        style={{ backgroundColor: nameColor || 'transparent' }}
+      >
         <input 
           value={name} 
           onChange={e => setName(e.target.value)} 
@@ -2589,21 +2631,75 @@ function SpreadsheetRow({ index, data, readonly, onUpdate }: any) {
           placeholder={readonly ? "" : "..."}
           className="w-full h-full bg-transparent text-[11px] font-bold text-[var(--text)] px-3 outline-none focus:bg-[var(--accent)]/5 hover:bg-white/[0.02]" 
         />
+        {!readonly && (
+          <button 
+            onClick={() => setActivePicker({ ci: 'name' })}
+            className="absolute right-1 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--accent)] opacity-0 group-hover/name:opacity-100 transition-opacity"
+          >
+            <Palette size={10} />
+          </button>
+        )}
+        {!readonly && activePicker?.ci === 'name' && (
+          <>
+            <div className="fixed inset-0 z-[60]" onClick={() => setActivePicker(null)} />
+            <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1 w-24">
+              {PRESET_COLORS.map(c => (
+                <button
+                  key={c.name}
+                  onClick={() => updateColor('name', c.value)}
+                  title={c.name}
+                  className="w-4 h-4 rounded-full border border-white/10 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: c.value || '#333' }}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </td>
       {Array.from({ length: 7 }).map((_, ci) => {
         const val = cols[ci] || '';
-        const colorClass = getCellColor(val);
+        const customColor = colors[ci] || '';
+        const backgroundColor = getCellColor(val, customColor);
+        
         return (
-          <td key={ci} className={`border-r border-b border-[var(--border)] p-0.5 relative`}>
+          <td 
+            key={ci} 
+            className="border-r border-b border-[var(--border)] p-0 relative group/cell"
+            style={{ backgroundColor: backgroundColor || 'transparent' }}
+          >
             <input 
               value={val} 
               onChange={e => updateCol(ci, e.target.value)} 
               onBlur={handleBlur} 
               readOnly={readonly}
               className={`w-full h-full bg-transparent text-[9px] px-2 outline-none text-center rounded transition-all ${
-                colorClass ? `${colorClass} font-bold border` : 'focus:bg-[var(--accent)]/5 hover:bg-white/[0.02]'
+                backgroundColor ? 'font-bold' : 'hover:bg-white/[0.02]'
               }`} 
             />
+            {!readonly && (
+              <button 
+                onClick={() => setActivePicker({ ci })}
+                className="absolute right-0.5 top-0.5 text-[var(--muted)] hover:text-[var(--accent)] opacity-0 group-hover/cell:opacity-100 transition-opacity"
+              >
+                <Palette size={8} />
+              </button>
+            )}
+            {!readonly && activePicker?.ci === ci && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setActivePicker(null)} />
+                <div className="absolute top-full left-0 z-[70] mt-1 bg-[#1a1d24] border border-[var(--border)] rounded-lg p-2 shadow-2xl flex flex-wrap gap-1 w-24">
+                  {PRESET_COLORS.map(c => (
+                    <button
+                      key={c.name}
+                      onClick={() => updateColor(ci, c.value)}
+                      title={c.name}
+                      className="w-4 h-4 rounded-full border border-white/10 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: c.value || '#333' }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </td>
         );
       })}
