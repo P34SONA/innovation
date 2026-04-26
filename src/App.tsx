@@ -1249,7 +1249,21 @@ function ScheduleView({ data, user, refresh }: any) {
                         return (
                           <td key={d} className="p-1 border-r border-[var(--border)] group relative">
                             <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                              {emps.map(e => <span key={e} className="text-[9px] bg-[var(--accent)]/5 border border-[var(--accent)]/20 text-[var(--accent)] px-2 py-0.5 rounded-full font-mono">{e}</span>)}
+                              {emps.map(e => {
+                                const isSelf = e === user.name;
+                                return (
+                                  <span 
+                                    key={e} 
+                                    className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
+                                      isSelf 
+                                        ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
+                                        : 'bg-white/5 border-white/10 text-white'
+                                    }`}
+                                  >
+                                    {e}
+                                  </span>
+                                );
+                              })}
                               {user.isAdmin && (
                                 <button 
                                   onClick={() => handleCellClick(d, st.id)}
@@ -1269,7 +1283,21 @@ function ScheduleView({ data, user, refresh }: any) {
                     {week.map(d => (
                       <td key={d} className="p-1 border-r border-[var(--border)] group relative">
                          <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                            {getLeaveEmployees(d, 'Dayoff').map(e => <span key={e} className="text-[9px] bg-pink-500/10 border border-pink-500/30 text-[#f9a8d4] px-2 py-0.5 rounded-full font-mono">{e}</span>)}
+                            {getLeaveEmployees(d, 'Dayoff').map(e => {
+                              const isSelf = e === user.name;
+                              return (
+                                <span 
+                                  key={e} 
+                                  className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
+                                    isSelf 
+                                      ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
+                                      : 'bg-white/5 border-white/10 text-white'
+                                  }`}
+                                >
+                                  {e}
+                                </span>
+                              );
+                            })}
                             {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Dayoff')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-pink-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-pink-400" /></button>}
                          </div>
                       </td>
@@ -1280,7 +1308,21 @@ function ScheduleView({ data, user, refresh }: any) {
                     {week.map(d => (
                       <td key={d} className="p-1 border-r border-[var(--border)] group relative">
                          <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                            {getLeaveEmployees(d, 'Pre Approved Leave').map(e => <span key={e} className="text-[9px] bg-purple-500/10 border border-purple-500/30 text-[#c084fc] px-2 py-0.5 rounded-full font-mono">{e}</span>)}
+                            {getLeaveEmployees(d, 'Pre Approved Leave').map(e => {
+                              const isSelf = e === user.name;
+                              return (
+                                <span 
+                                  key={e} 
+                                  className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
+                                    isSelf 
+                                      ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
+                                      : 'bg-white/5 border-white/10 text-white'
+                                  }`}
+                                >
+                                  {e}
+                                </span>
+                              );
+                            })}
                             {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Pre Approved Leave')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-purple-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-purple-400" /></button>}
                          </div>
                       </td>
@@ -1302,6 +1344,10 @@ function ScheduleView({ data, user, refresh }: any) {
           onClose={() => setSelectedCell(null)}
           onSave={saveCell}
           assignments={data.assignments}
+          scheduleEntries={data.scheduleEntries}
+          leaveEntries={data.leaveEntries}
+          shiftId={selectedCell.shiftId}
+          leaveType={selectedCell.leaveType}
         />
       )}
 
@@ -1981,17 +2027,36 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
   );
 }
 
-function SelectionModal({ title, date, items, selected: initialSelected, onClose, onSave, assignments }: any) {
+function SelectionModal({ title, date, items, selected: initialSelected, onClose, onSave, assignments, scheduleEntries, leaveEntries, shiftId, leaveType }: any) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [search, setSearch] = useState('');
 
   const getConflict = (e: string) => {
-    const found = assignments.find((a: any) => {
+    // 1. Check Task assignments (SDP/DELTA)
+    const foundTask = assignments?.find((a: any) => {
       if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
       if (!a.employees.includes(e)) return false;
       return (date <= a.dutyTo && date >= a.dutyFrom);
     });
-    return found ? found.task : null;
+    if (foundTask) return foundTask.task;
+
+    // 2. Check other Shifts on the same day
+    const otherShift = scheduleEntries?.find((s: any) => 
+      s.employee_name === e && 
+      s.schedule_date === date && 
+      s.shift_type_id !== shiftId
+    );
+    if (otherShift) return "Shift Assigned";
+
+    // 3. Check other Leave/Dayoff on the same day
+    const otherLeave = leaveEntries?.find((l: any) => 
+      l.employee_name === e && 
+      l.schedule_date === date && 
+      l.leave_type !== leaveType
+    );
+    if (otherLeave) return otherLeave.leave_type;
+
+    return null;
   };
 
   return (
