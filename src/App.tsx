@@ -1630,19 +1630,26 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     <button 
                       key={e} 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      disabled={isAssigned}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all ${
+                      disabled={!!isAssigned}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group ${
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
                           : isAssigned 
-                            ? 'bg-red-500/10 border-red-500/20 text-red-500/40 cursor-not-allowed'
-                            : mode === 'shift' && shiftId
-                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/20'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.5]'
+                            : mode === 'shift'
+                              ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400/90 hover:border-cyan-500/50 hover:bg-cyan-500/10'
                               : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
                     >
-                      <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${
+                        isSelected 
+                          ? 'bg-black/20 border-black/20' 
+                          : isAssigned 
+                            ? 'bg-red-500/10 border-red-500/30' 
+                            : 'bg-black/40 border-gray-600 group-hover:border-cyan-500/50'
+                      }`}>
                         {isSelected && <Check size={10} strokeWidth={3} />}
+                        {isAssigned && <X size={8} className="text-red-500/60" />}
                       </div>
                       <span className="flex-1 text-left truncate">{e}</span>
                     </button>
