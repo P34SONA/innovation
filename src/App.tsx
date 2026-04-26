@@ -1087,11 +1087,17 @@ function ScheduleView({ data, user, refresh }: any) {
       if (isPayPro) {
         const payProType = data.shiftTypes.find((s:any) => s.name === 'PayPro & Batch Upload');
         if (payProType) {
-          const rows = datesInRange.flatMap(d => selectedEmps.map((emp: string) => ({
-            schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
-          })));
-          const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
-          if (error) throw error;
+          const rows = selectedEmps.flatMap((emp: string) => 
+            datesInRange
+              .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff'))
+              .map(d => ({
+                schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
+              }))
+          );
+          if (rows.length > 0) {
+            const { error } = await getSb().from('schedule_entries').upsert(rows, { onConflict: 'schedule_date,shift_type_id,employee_name' });
+            if (error) throw error;
+          }
         }
       } else if (shiftId) {
         // Filter out dates where the employee has a 'Dayoff'
@@ -1440,10 +1446,10 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
         const hasShift = scheduleEntries.some((s: any) => 
           s.employee_name === emp && s.schedule_date === d
         );
-        const hasLeave = leaveEntries.some((l: any) => 
-          l.employee_name === emp && l.schedule_date === d
+        const hasOtherLeave = leaveEntries.some((l: any) => 
+          l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff'
         );
-        return hasShift || hasLeave;
+        return hasShift || hasOtherLeave;
       });
     }
 
@@ -1635,7 +1641,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
                           : isAssigned 
                             ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
-                            : mode === 'shift'
+                            : (mode === 'shift' || mode === 'paypro')
                               ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
                               : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
