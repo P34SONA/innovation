@@ -642,9 +642,19 @@ function AdminView({ data, user, refresh }: any) {
             <button onClick={addEmployee} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {data.employees.map((e: string) => (
-              <span key={e} className="bg-[var(--accent2)]/10 text-[var(--accent2)] border border-[var(--accent2)]/30 px-3 py-1 rounded-full text-xs font-mono">{e}</span>
-            ))}
+            {data.employees.map((e: string) => {
+              const currentYear = new Date().getFullYear().toString();
+              const used = data.leaveEntries.filter(l => l.employee_name === e && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
+              const remaining = Math.max(0, MAX_VL - used);
+              return (
+                <div key={e} className="flex flex-col items-center bg-[var(--accent2)]/5 border border-[var(--accent2)]/20 px-3 py-1.5 rounded-xl min-w-[100px]">
+                  <span className="text-xs font-mono text-[var(--accent2)] font-bold">{e}</span>
+                  <span className={`text-[10px] font-bold ${remaining === 0 ? 'text-red-400' : 'text-[var(--muted)]'}`}>
+                    {remaining} / {MAX_VL} Left
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </Card>
 
@@ -945,7 +955,10 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function TaskView({ data, user }: any) {
   const [filter, setFilter] = useState<'current' | 'history'>('current');
   const today = getTodayStr();
+  const currentYear = new Date().getFullYear().toString();
   
+  const palUsed = data.leaveEntries.filter((l: any) => l.employee_name === user.name && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
+
   const tasks = data.assignments.filter((a: any) => {
     if (filter === 'current') return a.dutyTo >= today;
     return a.dutyTo < today;
@@ -956,9 +969,24 @@ function TaskView({ data, user }: any) {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="font-serif text-3xl mb-1">Hello, {user.name}! 👋</h1>
-        <p className="text-[var(--muted)]">All task assignments across the team.</p>
+      <div className="mb-8 flex justify-between items-end">
+        <div>
+          <h1 className="font-serif text-3xl mb-1">Hello, {user.name}! 👋</h1>
+          <p className="text-[var(--muted)]">All task assignments across the team.</p>
+        </div>
+        {!user.isGuest && (
+          <div className="bg-[var(--surface)] border border-[var(--border)] p-4 rounded-2xl flex items-center gap-6">
+            <div className="text-center">
+              <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">Leave Balance</div>
+              <div className="text-xl font-serif text-[var(--accent)]">{MAX_VL - palUsed} <span className="text-xs text-[var(--muted)]">Days</span></div>
+            </div>
+            <div className="h-10 w-px bg-[var(--border)]" />
+            <div className="text-center">
+              <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">Total Entitled</div>
+              <div className="text-xl font-serif">{MAX_VL} <span className="text-xs text-[var(--muted)]">Days</span></div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 mb-8 bg-[var(--surface)] p-1 rounded-xl border border-[var(--border)] w-fit">
@@ -2242,7 +2270,8 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
     if (next[dateStr]) {
       delete next[dateStr];
     } else {
-      next[dateStr] = 'Pre Approved Leave'; // Default
+      if (Object.keys(next).length >= MAX_VL) return;
+      next[dateStr] = 'Pre Approved Leave';
     }
     setSelectedDates(next);
   };
@@ -2255,7 +2284,7 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
     const d = new Date(year, month, 1).getDay();
     return d === 0 ? 6 : d - 1; // 0=Mon, 6=Sun
   };
-
+  
   const saveAll = async () => {
     if (!selectedEmp) return;
     
@@ -2265,6 +2294,7 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
       .from('leave_entries')
       .delete()
       .eq('employee_name', selectedEmp)
+      .eq('leave_type', 'Pre Approved Leave')
       .filter('schedule_date', 'gte', `${selectedYear}-01-01`)
       .filter('schedule_date', 'lte', `${selectedYear}-12-31`);
 
@@ -2273,7 +2303,7 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
     const inserts = Object.entries(selectedDates).map(([date, type]) => ({
       schedule_date: date,
       employee_name: selectedEmp,
-      leave_type: type,
+      leave_type: 'Pre Approved Leave',
       added_by: user.name
     }));
 
@@ -2287,8 +2317,7 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
     onClose();
   };
 
-  const palCount = Object.values(selectedDates).filter(v => v === 'Pre Approved Leave').length;
-  const slCount = Object.values(selectedDates).filter(v => v === 'Sick Leave').length;
+  const palCount = Object.keys(selectedDates).length;
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -2339,34 +2368,19 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1">
             <div className="bg-[#20232d] border border-[var(--border)] p-4 rounded-2xl relative overflow-hidden group">
               <div className="flex justify-between items-end mb-3">
                 <div className="flex items-center gap-2 text-xs font-bold text-[var(--muted)] uppercase">
-                  🌴 Pre-Approved Leave
+                  🌴 Pre-Approved Leave Allocation
                 </div>
-                <div className="text-sm font-mono"><span className="text-[var(--accent)] text-lg font-bold">{palCount}</span> / 15</div>
+                <div className="text-sm font-mono"><span className="text-[var(--accent)] text-lg font-bold">{palCount}</span> / {MAX_VL}</div>
               </div>
               <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min((palCount / 15) * 100, 100)}%` }}
-                  className={`h-full ${palCount > 15 ? 'bg-red-500' : 'bg-[var(--accent)]'}`}
-                />
-              </div>
-            </div>
-            <div className="bg-[#20232d] border border-[var(--border)] p-4 rounded-2xl relative overflow-hidden group">
-              <div className="flex justify-between items-end mb-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-[var(--muted)] uppercase">
-                  🤕 Sick Leave
-                </div>
-                <div className="text-sm font-mono"><span className="text-orange-400 text-lg font-bold">{slCount}</span> / 10</div>
-              </div>
-              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min((slCount / 10) * 100, 100)}%` }}
-                  className={`h-full ${slCount > 10 ? 'bg-red-500' : 'bg-orange-400'}`}
+                  animate={{ width: `${Math.min((palCount / MAX_VL) * 100, 100)}%` }}
+                  className={`h-full ${palCount > MAX_VL ? 'bg-red-500' : 'bg-[var(--accent)]'}`}
                 />
               </div>
             </div>
@@ -2400,12 +2414,14 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
                     const days = getDaysInMonth(selectedYear, activeMonth);
                     const next = { ...selectedDates };
                     for (let d = 1; d <= days; d++) {
+                      if (Object.keys(next).length >= MAX_VL) break;
                       const dateStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                       next[dateStr] = 'Pre Approved Leave';
                     }
                     setSelectedDates(next);
                   }}
-                  className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/10"
+                  disabled={palCount >= MAX_VL}
+                  className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors border border-white/10"
                 >
                   Select All
                 </button>
@@ -2443,29 +2459,20 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
                 return (
                   <button
                     key={day}
+                    disabled={!isSelected && palCount >= MAX_VL}
                     onClick={() => toggleDate(dStr)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      const next = { ...selectedDates };
-                      if (next[dStr] === 'Pre Approved Leave') next[dStr] = 'Sick Leave';
-                      else if (next[dStr] === 'Sick Leave') next[dStr] = 'Pre Approved Leave';
-                      setSelectedDates(next);
-                    }}
-                    title="Right click to switch between PAL and SL"
                     className={`aspect-square flex items-center justify-center text-xs font-mono rounded-lg transition-all border relative group ${
                       isSelected 
-                        ? type === 'Sick Leave' 
-                          ? 'bg-orange-500 text-black border-orange-400 font-bold'
-                          : 'bg-[var(--accent)] text-black border-[#f0d060] font-bold'
+                        ? 'bg-[var(--accent)] text-black border-[#f0d060] font-bold'
                         : isSun
-                          ? 'text-red-400 hover:bg-red-400/10 border-transparent'
-                          : 'text-[var(--text)] hover:bg-white/5 border-transparent'
+                          ? 'text-red-400 hover:bg-red-400/10 border-transparent disabled:opacity-20'
+                          : 'text-[var(--text)] hover:bg-white/5 border-transparent disabled:opacity-20'
                     }`}
                   >
                     {day}
                     {isSelected && (
                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#1a1d24] border border-white/20 rounded-full flex items-center justify-center overflow-hidden">
-                        <div className={`w-1.5 h-1.5 rounded-full ${type === 'Sick Leave' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                       </div>
                     )}
                   </button>
