@@ -2205,6 +2205,296 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
   );
 }
 
+function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
+  const [selectedEmp, setSelectedEmp] = useState('');
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [activeMonth, setActiveMonth] = useState(new Date().getMonth());
+  const [selectedDates, setSelectedDates] = useState<{ [key: string]: string }>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedEmp) {
+      fetchExistingLeaves();
+    }
+  }, [selectedEmp, selectedYear]);
+
+  const fetchExistingLeaves = async () => {
+    setLoading(true);
+    const { data: entries, error } = await getSb()
+      .from('leave_entries')
+      .select('*')
+      .eq('employee_name', selectedEmp)
+      .filter('schedule_date', 'gte', `${selectedYear}-01-01`)
+      .filter('schedule_date', 'lte', `${selectedYear}-12-31`);
+    
+    if (entries) {
+      const datesObj: { [key: string]: string } = {};
+      entries.forEach((e: any) => {
+        datesObj[e.schedule_date] = e.leave_type;
+      });
+      setSelectedDates(datesObj);
+    }
+    setLoading(false);
+  };
+
+  const toggleDate = (dateStr: string) => {
+    const next = { ...selectedDates };
+    if (next[dateStr]) {
+      delete next[dateStr];
+    } else {
+      next[dateStr] = 'Pre Approved Leave'; // Default
+    }
+    setSelectedDates(next);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (year: number, month: number) => {
+    const d = new Date(year, month, 1).getDay();
+    return d === 0 ? 6 : d - 1; // 0=Mon, 6=Sun
+  };
+
+  const saveAll = async () => {
+    if (!selectedEmp) return;
+    
+    setLoading(true);
+    // Delete existing for this year
+    const { error: delError } = await getSb()
+      .from('leave_entries')
+      .delete()
+      .eq('employee_name', selectedEmp)
+      .filter('schedule_date', 'gte', `${selectedYear}-01-01`)
+      .filter('schedule_date', 'lte', `${selectedYear}-12-31`);
+
+    if (delError) { alert(delError.message); setLoading(false); return; }
+
+    const inserts = Object.entries(selectedDates).map(([date, type]) => ({
+      schedule_date: date,
+      employee_name: selectedEmp,
+      leave_type: type,
+      added_by: user.name
+    }));
+
+    if (inserts.length > 0) {
+      const { error: insError } = await getSb().from('leave_entries').insert(inserts);
+      if (insError) alert(insError.message);
+    }
+
+    setLoading(false);
+    refresh();
+    onClose();
+  };
+
+  const palCount = Object.values(selectedDates).filter(v => v === 'Pre Approved Leave').length;
+  const slCount = Object.values(selectedDates).filter(v => v === 'Sick Leave').length;
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-[#1a1d24] border border-[var(--border)] rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+      >
+        <div className="p-6 border-b border-[var(--border)] flex justify-between items-center bg-[#20232d]">
+          <div>
+            <h2 className="text-2xl font-serif flex items-center gap-2">
+              <Calendar className="text-[var(--accent)]" /> Yearly Leave Planner
+            </h2>
+            <p className="text-[var(--muted)] text-xs mt-1">Set pre-approved leaves for multiple months and specific dates in one go.</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Employee</label>
+              <select 
+                value={selectedEmp} 
+                onChange={e => setSelectedEmp(e.target.value)}
+                className="w-full bg-[#20232d] border border-[var(--border)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all"
+              >
+                <option value="">Select Employee...</option>
+                {data.employees.map((e: string) => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Year</label>
+              <select 
+                value={selectedYear} 
+                onChange={e => setSelectedYear(Number(e.target.value))}
+                className="w-full bg-[#20232d] border border-[var(--border)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all"
+              >
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-[#20232d] border border-[var(--border)] p-4 rounded-2xl relative overflow-hidden group">
+              <div className="flex justify-between items-end mb-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-[var(--muted)] uppercase">
+                  🌴 Pre-Approved Leave
+                </div>
+                <div className="text-sm font-mono"><span className="text-[var(--accent)] text-lg font-bold">{palCount}</span> / 15</div>
+              </div>
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min((palCount / 15) * 100, 100)}%` }}
+                  className={`h-full ${palCount > 15 ? 'bg-red-500' : 'bg-[var(--accent)]'}`}
+                />
+              </div>
+            </div>
+            <div className="bg-[#20232d] border border-[var(--border)] p-4 rounded-2xl relative overflow-hidden group">
+              <div className="flex justify-between items-end mb-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-[var(--muted)] uppercase">
+                  🤕 Sick Leave
+                </div>
+                <div className="text-sm font-mono"><span className="text-orange-400 text-lg font-bold">{slCount}</span> / 10</div>
+              </div>
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min((slCount / 10) * 100, 100)}%` }}
+                  className={`h-full ${slCount > 10 ? 'bg-red-500' : 'bg-orange-400'}`}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Select Months</div>
+            <div className="flex flex-wrap gap-2">
+              {months.map((m, i) => (
+                <button
+                  key={m}
+                  onClick={() => setActiveMonth(i)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                    activeMonth === i 
+                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' 
+                      : 'bg-[#20232d] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-[#161820] border border-[var(--border)] rounded-2xl overflow-hidden p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-serif text-lg text-purple-300">{months[activeMonth]} {selectedYear}</h3>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    const days = getDaysInMonth(selectedYear, activeMonth);
+                    const next = { ...selectedDates };
+                    for (let d = 1; d <= days; d++) {
+                      const dateStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      next[dateStr] = 'Pre Approved Leave';
+                    }
+                    setSelectedDates(next);
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/10"
+                >
+                  Select All
+                </button>
+                <button 
+                  onClick={() => {
+                    const days = getDaysInMonth(selectedYear, activeMonth);
+                    const next = { ...selectedDates };
+                    for (let d = 1; d <= days; d++) {
+                      const dateStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      delete next[dateStr];
+                    }
+                    setSelectedDates(next);
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/10"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center">
+              {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
+                <div key={d} className={`text-[9px] font-bold mb-4 ${d === 'SUN' ? 'text-red-400' : 'text-[var(--muted)]'}`}>{d}</div>
+              ))}
+              {Array.from({ length: getFirstDayOfMonth(selectedYear, activeMonth) }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+              {Array.from({ length: getDaysInMonth(selectedYear, activeMonth) }).map((_, i) => {
+                const day = i + 1;
+                const dStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isSelected = !!selectedDates[dStr];
+                const type = selectedDates[dStr];
+                const isSun = new Date(selectedYear, activeMonth, day).getDay() === 0;
+
+                return (
+                  <button
+                    key={day}
+                    onClick={() => toggleDate(dStr)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      const next = { ...selectedDates };
+                      if (next[dStr] === 'Pre Approved Leave') next[dStr] = 'Sick Leave';
+                      else if (next[dStr] === 'Sick Leave') next[dStr] = 'Pre Approved Leave';
+                      setSelectedDates(next);
+                    }}
+                    title="Right click to switch between PAL and SL"
+                    className={`aspect-square flex items-center justify-center text-xs font-mono rounded-lg transition-all border relative group ${
+                      isSelected 
+                        ? type === 'Sick Leave' 
+                          ? 'bg-orange-500 text-black border-orange-400 font-bold'
+                          : 'bg-[var(--accent)] text-black border-[#f0d060] font-bold'
+                        : isSun
+                          ? 'text-red-400 hover:bg-red-400/10 border-transparent'
+                          : 'text-[var(--text)] hover:bg-white/5 border-transparent'
+                    }`}
+                  >
+                    {day}
+                    {isSelected && (
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#1a1d24] border border-white/20 rounded-full flex items-center justify-center overflow-hidden">
+                        <div className={`w-1.5 h-1.5 rounded-full ${type === 'Sick Leave' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-[var(--border)] bg-[#20232d] flex gap-4">
+          <button 
+            onClick={onClose}
+            className="flex-1 px-6 py-4 rounded-2xl bg-[var(--surface2)] border border-[var(--border)] text-sm font-bold hover:border-[var(--muted)] transition-all"
+          >
+            Cancel
+          </button>
+          <button 
+            disabled={loading || !selectedEmp}
+            onClick={saveAll}
+            className="flex-1 px-6 py-4 rounded-2xl bg-[var(--accent)] text-black text-sm font-bold hover:bg-[#f0d060] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-[var(--accent)]/10"
+          >
+            {loading ? 'Saving...' : 'Save All Leaves'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function LeaveView({ data, user, refresh }: any) {
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
   const [year, month] = currentMonth.split('-').map(Number);
@@ -2213,6 +2503,7 @@ function LeaveView({ data, user, refresh }: any) {
   const [lType, setLType] = useState('Pre Approved Leave');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [showPlanner, setShowPlanner] = useState(false);
 
   const monthsLeaves = data.leaveEntries.filter((e: any) => e.schedule_date.startsWith(currentMonth) && e.leave_type !== 'Dayoff');
 
@@ -2252,7 +2543,18 @@ function LeaveView({ data, user, refresh }: any) {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="font-serif text-3xl">Pre-Approved Leaves</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="font-serif text-3xl">Pre-Approved Leaves</h2>
+          {user.isAdmin && (
+            <button 
+              onClick={() => setShowPlanner(true)}
+              className="flex items-center gap-2 bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 px-4 py-2 rounded-xl text-sm font-bold hover:bg-[var(--accent)] hover:text-black transition-all"
+            >
+              <Calendar size={16} />
+              Yearly Planner
+            </button>
+          )}
+        </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
           <Calendar size={16} className="text-white ml-1" />
           <button onClick={() => {
@@ -2327,6 +2629,14 @@ function LeaveView({ data, user, refresh }: any) {
           ))
         )}
       </div>
+      {showPlanner && (
+        <YearlyLeavePlannerModal 
+          data={data} 
+          user={user} 
+          refresh={refresh} 
+          onClose={() => setShowPlanner(false)} 
+        />
+      )}
     </div>
   );
 }
