@@ -1338,6 +1338,37 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     setExcludedDates([]);
   }, [mode, periodType, selectedWeekIdx]);
 
+  // Auto-exclude Dayoff dates when employees are selected in shift mode
+  useEffect(() => {
+    if (mode === 'shift' && shiftId && selectedEmps.length > 0) {
+      let baseDates: string[] = [];
+      if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
+      else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
+      else baseDates = weeks[selectedWeekIdx] || [];
+
+      const currentExclusions = new Set(excludedDates);
+      let changed = false;
+
+      selectedEmps.forEach(emp => {
+        baseDates.forEach(d => {
+          const hasDayOff = leaveEntries.some((l: any) => 
+            l.employee_name === emp && 
+            l.schedule_date === d && 
+            l.leave_type === 'Dayoff'
+          );
+          if (hasDayOff && !currentExclusions.has(d)) {
+            currentExclusions.add(d);
+            changed = true;
+          }
+        });
+      });
+
+      if (changed) {
+        setExcludedDates(Array.from(currentExclusions));
+      }
+    }
+  }, [selectedEmps, shiftId, mode, periodType, selectedWeekIdx, leaveEntries, dates, excludedDates]);
+
   const handleSave = () => {
     if (selectedEmps.length === 0) {
       alert('Please select employees.');
@@ -1431,31 +1462,31 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
         </div>
         <p className="text-sm text-gray-400 mb-8">Assign employees to a shift — select a period and specific days.</p>
 
-        <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-3 gap-3 mb-6">
           <button 
             onClick={() => setMode('shift')}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'shift' ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+            className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'shift' ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)]' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Clock size={20} className="mb-2" />
-            <span className="text-xs font-bold uppercase tracking-widest">Shift</span>
+            <Clock size={16} className="mb-1" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Shift</span>
           </button>
           <button 
             onClick={() => setMode('paypro')}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'paypro' ? 'bg-orange-500/10 border-orange-500 text-orange-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+            className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'paypro' ? 'bg-orange-500/10 border-orange-500 text-orange-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Zap size={20} className="mb-2" />
-            <span className="text-center text-[10px] font-bold uppercase tracking-tight leading-tight">PayPro & Batch<br/>Upload</span>
+            <Zap size={16} className="mb-1" />
+            <span className="text-center text-[9px] font-bold uppercase tracking-tight leading-tight">PayPro & Batch<br/>Upload</span>
           </button>
           <button 
             onClick={() => setMode('dayoff')}
-            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${mode === 'dayoff' ? 'bg-pink-500/10 border-pink-500 text-pink-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
+            className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'dayoff' ? 'bg-pink-500/10 border-pink-500 text-pink-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
-            <Moon size={20} className="mb-2" />
-            <span className="text-xs font-bold uppercase tracking-widest">Day Off</span>
+            <Moon size={16} className="mb-1" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Day Off</span>
           </button>
         </div>
 
-        <div className="space-y-8">
+        <div className="space-y-6">
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">
               1. {mode === 'dayoff' ? 'Select Days (Mon-Sun)' : 'Select Period'}
@@ -1590,7 +1621,9 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-500/20' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' 
                           : isAssigned 
                             ? 'bg-red-500/10 border-red-500/30 text-red-500/80 hover:border-red-500/50 hover:bg-red-500/20'
-                            : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
+                            : mode === 'shift' && shiftId
+                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/20'
+                              : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
                       }`}
                     >
                       <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-black/20' : 'bg-black/40 border-gray-600'}`}>
