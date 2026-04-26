@@ -1506,31 +1506,23 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   };
 
   const getEmpAssignedCount = (emp: string) => {
-    if (mode === 'paypro') {
-      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
-      return (scheduleEntries || []).filter((s: any) => 
-        s.employee_name === emp && 
-        s.schedule_date.startsWith(currentMonth) && 
-        s.shift_type_id === payProType?.id
-      ).length;
-    }
-    const sCount = (scheduleEntries || []).filter((s: any) => s.employee_name === emp && s.schedule_date.startsWith(currentMonth)).length;
-    const lCount = (leaveEntries || []).filter((l: any) => l.employee_name === emp && l.schedule_date.startsWith(currentMonth)).length;
-    return sCount + lCount;
+    if (mode !== 'paypro') return 0;
+    const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+    return (scheduleEntries || []).filter((s: any) => 
+      s.employee_name === emp && 
+      s.schedule_date.startsWith(currentMonth) && 
+      s.shift_type_id === payProType?.id
+    ).length;
   };
 
   const getPeriodCount = (p: 'p1' | 'p2') => {
+    if (mode !== 'paypro') return 0;
     let range: string[] = [];
     if (p === 'p1') range = dates.filter(d => Number(d.split('-')[2]) <= 15);
     else range = dates.filter(d => Number(d.split('-')[2]) > 15);
     
-    if (mode === 'paypro') {
-      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
-      return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date) && s.shift_type_id === payProType?.id).length;
-    }
-
-    return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date)).length + 
-           (leaveEntries || []).filter((l: any) => range.includes(l.schedule_date)).length;
+    const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+    return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date) && s.shift_type_id === payProType?.id).length;
   };
 
   const WEEKDAYS = [
@@ -1623,14 +1615,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >
                     1–15
-                    <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p1')}</span>
+                    {mode === 'paypro' && <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p1')}</span>}
                   </button>
                   <button 
                     onClick={() => setPeriodType('p2')}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >
                     16–{daysInMonth}
-                    <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p2')}</span>
+                    {mode === 'paypro' && <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p2')}</span>}
                   </button>
                 </div>
                 
@@ -1771,7 +1763,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       </div>
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="text-left truncate font-sans">
-                          {e} {assignedCount > 0 && <span className="opacity-60 font-mono text-[9px]"> - {assignedCount}</span>}
+                          {e} {mode === 'paypro' && assignedCount > 0 && <span className="opacity-60 font-mono text-[9px]"> - {assignedCount}</span>}
                         </span>
                         {conflictReason && (
                           <span className="text-[7px] text-red-400/80 truncate leading-none mt-0.5">{conflictReason}</span>
