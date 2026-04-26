@@ -1397,7 +1397,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [search, setSearch] = useState('');
-  const [excludedDates, setExcludedDates] = useState<string[]>([]);
+  const [includedDates, setIncludedDates] = useState<string[]>([]);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -1416,45 +1416,23 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
   const getActiveDates = () => {
     if (mode === 'dayoff') {
-      // For Day Off, we target the whole month but only specific weekdays
       return dates.filter(d => selectedWeekdays.includes(new Date(d + 'T00:00:00').getDay()));
     }
-    let baseDates: string[] = [];
-    if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
-    else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
-    else baseDates = weeks[selectedWeekIdx] || [];
-    
-    return baseDates.filter(d => !excludedDates.includes(d));
+    return includedDates;
   };
 
   const activeDates = getActiveDates();
-  const startDate = mode === 'dayoff' ? `${currentMonth}-01` : (activeDates[0] || '');
-  const endDate = mode === 'dayoff' ? `${currentMonth}-${String(daysInMonth).padStart(2, '0')}` : (activeDates[activeDates.length - 1] || '');
 
-  // Effect to handle pre-selection and conflict filtering
+  // Reset included dates when period or mode changes
   useEffect(() => {
-    if (mode === 'dayoff') {
-      if (selectedWeekdays.length > 0) {
-        // User requested: "when admin select day... names assigned for selected day will highlighted"
-        // Pre-select employees who already have Dayoff on ANY of the selected dates
-        const alreadyAssigned = employees.filter((emp: string) => {
-          return activeDates.some(d => 
-            leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff')
-          );
-        });
-        setSelectedEmps(alreadyAssigned);
-      } else {
-        setSelectedEmps([]);
-      }
-    }
-  }, [mode, selectedWeekdays, periodType, selectedWeekIdx, employees, activeDates.length, leaveEntries.length, excludedDates, shiftId]);
-
-  // Reset excluded dates when period or mode changes
-  useEffect(() => {
-    setExcludedDates([]);
+    setIncludedDates([]);
   }, [mode, periodType, selectedWeekIdx]);
 
   const handleSave = () => {
+    if (activeDates.length === 0) {
+      alert('Please select at least one day.');
+      return;
+    }
     if (selectedEmps.length === 0) {
       alert('Please select employees.');
       return;
@@ -1478,50 +1456,68 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   };
 
   const checkConflict = (emp: string) => {
-    if (mode === 'paypro') return false;
-    if (mode === 'dayoff') {
-      // 1. Conflict if they have a DIFFERENT leave type on the target dates (activeDates).
-      const hasOtherLeave = activeDates.some(d => 
-        leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff')
-      );
-      if (hasOtherLeave) return true;
+    if (activeDates.length === 0) return null;
 
-      // 2. Disable if they have "Dayoff" on OTHER weekdays in the same month that are NOT in the current selection.
-      if (activeDates.length > 0) {
-        const hasDayOffOnOtherDays = leaveEntries.some((l: any) => 
-          l.employee_name === emp && 
-          l.leave_type === 'Dayoff' && 
-          l.schedule_date.startsWith(currentMonth) && 
-          !activeDates.includes(l.schedule_date)
-        );
-        return hasDayOffOnOtherDays;
+    if (mode === 'paypro') {
+      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+      for (const d of activeDates) {
+        const count = (scheduleEntries || []).filter((s: any) => s.schedule_date === d && s.shift_type_id === payProType?.id).length;
+        if (count >= 2) {
+          const isAlreadyThere = (scheduleEntries || []).some((s: any) => s.schedule_date === d && s.shift_type_id === payProType?.id && s.employee_name === emp);
+          if (!isAlreadyThere) return "PayPro Limit Reached (2/day)";
+        }
       }
+      return null;
+    }
+
+    if (mode === 'dayoff') {
+      const hasOtherLeave = activeDates.some(d => 
+        (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff')
+      );
+      if (hasOtherLeave) return "Other Leave Conflict";
+
+      const hasDayOffOnOtherDays = (leaveEntries || []).some((l: any) => 
+        l.employee_name === emp && 
+        l.leave_type === 'Dayoff' && 
+        l.schedule_date.startsWith(currentMonth) && 
+        !activeDates.includes(l.schedule_date)
+      );
+      if (hasDayOffOnOtherDays) return "Already has Dayoff on other date";
       
-      return false;
+      return null;
     }
 
-    if (mode === 'shift' || mode === 'paypro') {
-      return activeDates.some(d => {
-        const hasShift = scheduleEntries.some((s: any) => 
-          s.employee_name === emp && s.schedule_date === d
-        );
-        const hasOtherLeave = leaveEntries.some((l: any) => 
-          l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff'
-        );
-        return hasShift || hasOtherLeave;
-      });
+    // mode === 'shift'
+    for (const d of activeDates) {
+      const entry = (scheduleEntries || []).find((s: any) => s.employee_name === emp && s.schedule_date === d);
+      if (entry) {
+        const st = shiftTypes.find((t: any) => t.id === entry.shift_type_id);
+        const name = st?.name || "Other Shift";
+        if (name.includes('6:00AM') || name.includes('10:00PM')) {
+          return `Assigned to ${name}`;
+        }
+        return `Assigned: ${name}`;
+      }
+      const hasOtherLeave = (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff');
+      if (hasOtherLeave) return "Leave Conflict";
     }
 
-    // For other modes (paypro), check if any day in the activeDates is busy
-    const busyOnAnyActiveDate = (datesToCheck: string[]) => {
-      return datesToCheck.some(d => {
-        const hasShift = scheduleEntries.some((s: any) => s.employee_name === emp && s.schedule_date === d);
-        const hasLeave = leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d);
-        return hasShift || hasLeave;
-      });
-    };
+    return null;
+  };
 
-    return busyOnAnyActiveDate(activeDates);
+  const getEmpAssignedCount = (emp: string) => {
+    const sCount = (scheduleEntries || []).filter((s: any) => s.employee_name === emp && s.schedule_date.startsWith(currentMonth)).length;
+    const lCount = (leaveEntries || []).filter((l: any) => l.employee_name === emp && l.schedule_date.startsWith(currentMonth)).length;
+    return sCount + lCount;
+  };
+
+  const getPeriodCount = (p: 'p1' | 'p2') => {
+    let range: string[] = [];
+    if (p === 'p1') range = dates.filter(d => Number(d.split('-')[2]) <= 15);
+    else range = dates.filter(d => Number(d.split('-')[2]) > 15);
+    
+    return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date)).length + 
+           (leaveEntries || []).filter((l: any) => range.includes(l.schedule_date)).length;
   };
 
   const WEEKDAYS = [
@@ -1577,35 +1573,52 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
             
             {mode === 'dayoff' ? (
               <div className="flex flex-wrap gap-1.5">
-                {WEEKDAYS.map(day => (
-                  <button 
-                    key={day.value}
-                    onClick={() => {
-                      setSelectedWeekdays(prev => 
-                        prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
-                      );
-                    }}
-                    className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition-all flex-1 min-w-[70px] ${
-                      selectedWeekdays.includes(day.value) 
-                        ? 'bg-pink-500 text-white border-pink-500 shadow-md' 
-                        : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
-                    }`}
-                  >
-                    {day.label}
-                  </button>
-                ))}
+                {WEEKDAYS.map(day => {
+                  const isAlreadyDayOffForSelected = selectedEmps.length === 1 && (leaveEntries || []).some((l: any) => 
+                    l.employee_name === selectedEmps[0] && 
+                    l.leave_type === 'Dayoff' && 
+                    new Date(l.schedule_date + 'T00:00:00').getDay() === day.value
+                  );
+
+                  return (
+                    <button 
+                      key={day.value}
+                      disabled={isAlreadyDayOffForSelected}
+                      onClick={() => {
+                        setSelectedWeekdays(prev => 
+                          prev.includes(day.value) ? prev.filter(v => v !== day.value) : [...prev, day.value]
+                        );
+                      }}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-bold border transition-all flex-1 min-w-[70px] ${
+                        selectedWeekdays.includes(day.value) 
+                          ? 'bg-pink-500 text-white border-pink-500 shadow-md' 
+                          : isAlreadyDayOffForSelected
+                            ? 'bg-red-500/10 border-red-500/20 text-red-500/40 cursor-not-allowed opacity-50'
+                            : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   <button 
                     onClick={() => setPeriodType('p1')}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                  >1–15</button>
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >
+                    1–15
+                    <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p1')}</span>
+                  </button>
                   <button 
                     onClick={() => setPeriodType('p2')}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-                  >16–{daysInMonth}</button>
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                  >
+                    16–{daysInMonth}
+                    <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p2')}</span>
+                  </button>
                 </div>
                 
                 <div className="flex flex-wrap gap-1.5 p-3 bg-gray-900/50 rounded-2xl border border-gray-800/50">
@@ -1622,19 +1635,19 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       const dayName = DAY_NAMES[new Date(d + 'T00:00:00').getDay()];
                       const isSun = new Date(d + 'T00:00:00').getDay() === 0;
                       const isSat = new Date(d + 'T00:00:00').getDay() === 6;
-                      const isExcluded = excludedDates.includes(d);
+                      const isSelected = includedDates.includes(d);
                       
                       return (
                         <button 
                           key={d} 
                           onClick={() => {
-                            setExcludedDates(prev => 
+                            setIncludedDates(prev => 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
                             );
                           }}
                           className={`flex flex-col items-center px-2 py-1 rounded-xl border text-[9px] font-bold transition-all ${
-                            isExcluded 
-                              ? 'border-gray-800 bg-gray-900/50 text-gray-700 opacity-40' 
+                            isSelected 
+                              ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20' 
                               : isSun 
                                 ? 'border-red-500/30 bg-red-500/5 text-red-400' 
                                 : isSat 
@@ -1687,20 +1700,22 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                 .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
                 .sort()
                 .map((e: string) => {
-                  const isAssigned = checkConflict(e);
+                  const conflictReason = checkConflict(e);
                   const isSelected = selectedEmps.includes(e);
+                  const assignedCount = getEmpAssignedCount(e);
 
                   return (
                     <button 
                       key={e} 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      disabled={!!isAssigned}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group ${
+                      disabled={!!conflictReason}
+                      title={conflictReason || ''}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group relative ${
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
-                          : isAssigned 
+                          : conflictReason
                             ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
-                            : (mode === 'shift' || mode === 'paypro')
+                            : mode === 'shift' || mode === 'paypro'
                               ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
                               : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
@@ -1708,14 +1723,21 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${
                         isSelected 
                           ? 'bg-black/20 border-black/20' 
-                          : isAssigned 
+                          : conflictReason
                             ? 'bg-red-500/10 border-red-500/30' 
                             : 'bg-black/40 border-gray-600 group-hover:border-cyan-500/50'
                       }`}>
                         {isSelected && <Check size={10} strokeWidth={3} />}
-                        {isAssigned && <X size={8} className="text-red-500/60" />}
+                        {conflictReason && <X size={8} className="text-red-500/60" />}
                       </div>
-                      <span className="flex-1 text-left truncate">{e}</span>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="text-left truncate font-sans">
+                          {e} {assignedCount > 0 && <span className="opacity-60 font-mono text-[9px]"> - {assignedCount}</span>}
+                        </span>
+                        {conflictReason && (
+                          <span className="text-[7px] text-red-400/80 truncate leading-none mt-0.5">{conflictReason}</span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
