@@ -1438,13 +1438,13 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     if (mode === 'shift') {
       if (!shiftId) return false;
       return activeDates.some(d => {
-        const hasOtherShift = scheduleEntries.some((s: any) => 
-          s.employee_name === emp && s.schedule_date === d && s.shift_type_id != shiftId
+        const hasShift = scheduleEntries.some((s: any) => 
+          s.employee_name === emp && s.schedule_date === d
         );
         const hasLeave = leaveEntries.some((l: any) => 
           l.employee_name === emp && l.schedule_date === d
         );
-        return hasOtherShift || hasLeave;
+        return hasShift || hasLeave;
       });
     }
 
@@ -1630,13 +1630,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     <button 
                       key={e} 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-semibold transition-all ${
+                      disabled={isAssigned}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all ${
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
                           : isAssigned 
-                            ? 'bg-red-500/10 border-red-500/30 text-red-500/80 hover:border-red-500/50'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-500/40 cursor-not-allowed'
                             : mode === 'shift' && shiftId
-                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50'
+                              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/20'
                               : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
                       }`}
                     >
