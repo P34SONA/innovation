@@ -1657,6 +1657,16 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                           l.leave_type === 'Dayoff'
                         )
                       );
+
+                      // Check if selected employees are already assigned to PayPro on this date
+                      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+                      const alreadyAssignedToPayPro = selectedEmps.some(emp => 
+                        (scheduleEntries || []).some((s: any) => 
+                          s.employee_name === emp && 
+                          s.schedule_date === d && 
+                          s.shift_type_id === payProType?.id
+                        )
+                      );
                       
                       return (
                         <button 
@@ -1667,20 +1677,25 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
                             );
                           }}
-                          className={`flex flex-col items-center px-2 py-1 rounded-xl border text-[9px] font-bold transition-all ${
+                          className={`flex flex-col items-center px-2 py-1 rounded-xl border text-[9px] font-bold transition-all relative ${
                             isSelected 
-                              ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20' 
-                              : hasDayOffConflict
-                                ? 'bg-red-500/10 border-red-500/20 text-red-500/30 cursor-not-allowed opacity-50'
-                                : isSun 
-                                  ? 'border-red-500/30 bg-red-500/5 text-red-400' 
-                                  : isSat 
-                                    ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
-                                    : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
+                              ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20 shadow-inner' 
+                              : alreadyAssignedToPayPro
+                                ? 'bg-[var(--accent)]/20 border-[var(--accent)]/40 text-[var(--accent)]'
+                                : hasDayOffConflict
+                                  ? 'bg-red-500/10 border-red-500/20 text-red-500/30 cursor-not-allowed opacity-50'
+                                  : isSun 
+                                    ? 'border-red-500/30 bg-red-500/5 text-red-400' 
+                                    : isSat 
+                                      ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
+                                      : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
                           }`}
                         >
                           <span className="opacity-60">{dayName}</span>
                           <span className="text-[11px]">{dateNum}</span>
+                          {alreadyAssignedToPayPro && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-[var(--accent)] rounded-full shadow-[0_0_8px_var(--accent)]" />
+                          )}
                         </button>
                       );
                     });
@@ -1732,12 +1747,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                     <button 
                       key={e} 
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      disabled={!!conflictReason}
-                      title={conflictReason || ''}
+                      disabled={!!conflictReason || (mode === 'paypro' && !isSelected && selectedEmps.length >= 2)}
+                      title={conflictReason || (mode === 'paypro' && selectedEmps.length >= 2 ? 'Limit of 2 employees for PayPro' : '')}
                       className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group relative ${
                         isSelected 
                           ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
-                          : conflictReason
+                          : conflictReason || (mode === 'paypro' && selectedEmps.length >= 2)
                             ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
                             : mode === 'shift' || mode === 'paypro'
                               ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
