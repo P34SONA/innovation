@@ -1506,6 +1506,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   };
 
   const getEmpAssignedCount = (emp: string) => {
+    if (mode === 'paypro') {
+      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+      return (scheduleEntries || []).filter((s: any) => 
+        s.employee_name === emp && 
+        s.schedule_date.startsWith(currentMonth) && 
+        s.shift_type_id === payProType?.id
+      ).length;
+    }
     const sCount = (scheduleEntries || []).filter((s: any) => s.employee_name === emp && s.schedule_date.startsWith(currentMonth)).length;
     const lCount = (leaveEntries || []).filter((l: any) => l.employee_name === emp && l.schedule_date.startsWith(currentMonth)).length;
     return sCount + lCount;
@@ -1516,6 +1524,11 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     if (p === 'p1') range = dates.filter(d => Number(d.split('-')[2]) <= 15);
     else range = dates.filter(d => Number(d.split('-')[2]) > 15);
     
+    if (mode === 'paypro') {
+      const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
+      return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date) && s.shift_type_id === payProType?.id).length;
+    }
+
     return (scheduleEntries || []).filter((s: any) => range.includes(s.schedule_date)).length + 
            (leaveEntries || []).filter((l: any) => range.includes(l.schedule_date)).length;
   };
@@ -1637,9 +1650,18 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       const isSat = new Date(d + 'T00:00:00').getDay() === 6;
                       const isSelected = includedDates.includes(d);
                       
+                      const hasDayOffConflict = selectedEmps.some(emp => 
+                        (leaveEntries || []).some((l: any) => 
+                          l.employee_name === emp && 
+                          l.schedule_date === d && 
+                          l.leave_type === 'Dayoff'
+                        )
+                      );
+                      
                       return (
                         <button 
                           key={d} 
+                          disabled={hasDayOffConflict}
                           onClick={() => {
                             setIncludedDates(prev => 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
@@ -1648,11 +1670,13 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                           className={`flex flex-col items-center px-2 py-1 rounded-xl border text-[9px] font-bold transition-all ${
                             isSelected 
                               ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20' 
-                              : isSun 
-                                ? 'border-red-500/30 bg-red-500/5 text-red-400' 
-                                : isSat 
-                                  ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
-                                  : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
+                              : hasDayOffConflict
+                                ? 'bg-red-500/10 border-red-500/20 text-red-500/30 cursor-not-allowed opacity-50'
+                                : isSun 
+                                  ? 'border-red-500/30 bg-red-500/5 text-red-400' 
+                                  : isSat 
+                                    ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
+                                    : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
                           }`}
                         >
                           <span className="opacity-60">{dayName}</span>
