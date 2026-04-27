@@ -1379,7 +1379,7 @@ function ScheduleView({ data, user, refresh }: any) {
         if (payProType) {
           const rows = selectedEmps.flatMap((emp: string) => 
             datesInRange
-              .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff'))
+              .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d))
               .map(d => ({
                 schedule_date: d, shift_type_id: payProType.id, employee_name: emp, added_by: user.name
               }))
@@ -1390,10 +1390,10 @@ function ScheduleView({ data, user, refresh }: any) {
           }
         }
       } else if (shiftId) {
-        // Filter out dates where the employee has a 'Dayoff'
+        // Filter out dates where the employee has ANY leave/dayoff
         const rows = selectedEmps.flatMap((emp: string) => 
           datesInRange
-            .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type === 'Dayoff'))
+            .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d))
             .map(d => ({
               schedule_date: d, shift_type_id: shiftId, employee_name: emp, added_by: user.name
             }))
@@ -1702,17 +1702,20 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const dates = Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`);
-  const weeks: string[][] = [];
-  let currentWeek: string[] = [];
-  dates.forEach(d => {
-    currentWeek.push(d);
-    if (new Date(d + 'T00:00:00').getDay() === 0) {
-      weeks.push(currentWeek);
-      currentWeek = [];
-    }
-  });
-  if (currentWeek.length > 0) weeks.push(currentWeek);
+  const dates = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`), [daysInMonth, currentMonth]);
+  const weeks = useMemo(() => {
+    const w: string[][] = [];
+    let currentWeek: string[] = [];
+    dates.forEach(d => {
+      currentWeek.push(d);
+      if (new Date(d + 'T00:00:00').getDay() === 0) {
+        w.push(currentWeek);
+        currentWeek = [];
+      }
+    });
+    if (currentWeek.length > 0) w.push(currentWeek);
+    return w;
+  }, [dates]);
 
   const getActiveDates = () => {
     if (mode === 'dayoff') {
@@ -1723,10 +1726,27 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
   const activeDates = getActiveDates();
 
-  // Reset included dates when period or mode changes
+  // Auto-set included dates when period or employees change
   useEffect(() => {
-    setIncludedDates([]);
-  }, [mode, periodType, selectedWeekIdx]);
+    if (mode === 'shift' || mode === 'paypro') {
+      let baseDates: string[] = [];
+      if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
+      else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
+      else baseDates = weeks[selectedWeekIdx] || [];
+
+      // Auto-select all dates that don't have a conflict for PROMPT selection
+      // If any selected employee has a leave on that date, we consider it "potentially" conflicted for a bulk selection
+      const autoSelected = baseDates.filter(d => {
+        const hasLeave = selectedEmps.some(emp => 
+          (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d)
+        );
+        return !hasLeave;
+      });
+      setIncludedDates(autoSelected);
+    } else {
+      setIncludedDates([]);
+    }
+  }, [mode, periodType, selectedWeekIdx, selectedEmps.length, dates, weeks, leaveEntries]); // Re-run when selection length changes too
 
   const handleSave = () => {
     if (activeDates.length === 0) {
@@ -1942,15 +1962,13 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       const isSat = new Date(d + 'T00:00:00').getDay() === 6;
                       const isSelected = includedDates.includes(d);
                       
-                      const hasDayOffConflict = selectedEmps.some(emp => 
+                      const hasLeaveConflict = selectedEmps.some(emp => 
                         (leaveEntries || []).some((l: any) => 
                           l.employee_name === emp && 
-                          l.schedule_date === d && 
-                          l.leave_type === 'Dayoff'
+                          l.schedule_date === d
                         )
                       );
-
-                      // Check if selected employees are already assigned to PayPro on this date
+                      
                       const payProType = shiftTypes.find((s: any) => s.name === 'PayPro & Batch Upload');
                       const alreadyAssignedToPayPro = selectedEmps.some(emp => 
                         (scheduleEntries || []).some((s: any) => 
@@ -1963,7 +1981,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       return (
                         <button 
                           key={d} 
-                          disabled={hasDayOffConflict}
+                          disabled={hasLeaveConflict}
                           onClick={() => {
                             setIncludedDates(prev => 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
@@ -1974,7 +1992,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                               ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20 shadow-inner' 
                               : alreadyAssignedToPayPro
                                 ? 'bg-[var(--accent)]/20 border-[var(--accent)]/40 text-[var(--accent)]'
-                                : hasDayOffConflict
+                                : hasLeaveConflict
                                   ? 'bg-red-500/10 border-red-500/20 text-red-500/30 cursor-not-allowed opacity-50'
                                   : isSun 
                                     ? 'border-red-500/30 bg-red-500/5 text-red-400' 
