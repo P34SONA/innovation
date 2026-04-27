@@ -1726,27 +1726,24 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
   const activeDates = getActiveDates();
 
-  // Auto-set included dates when period or employees change
+  // Auto-set included dates when mode, period, or employees change
   useEffect(() => {
-    if (mode === 'shift' || mode === 'paypro') {
-      let baseDates: string[] = [];
-      if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
-      else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
-      else baseDates = weeks[selectedWeekIdx] || [];
+    if ((mode === 'shift' || mode === 'paypro') && selectedEmps.length > 0) {
+      // If we are in month mode (p1/p2), we auto-select the WHOLE month 
+      // so the selection is consistent across tab switches.
+      const targetRange = periodType === 'weekly' ? (weeks[selectedWeekIdx] || []) : dates;
 
-      // Auto-select all dates that don't have a conflict for PROMPT selection
-      // If any selected employee has a leave on that date, we consider it "potentially" conflicted for a bulk selection
-      const autoSelected = baseDates.filter(d => {
+      const autoSelected = targetRange.filter(d => {
         const hasLeave = selectedEmps.some(emp => 
           (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d)
         );
         return !hasLeave;
       });
       setIncludedDates(autoSelected);
-    } else {
+    } else if (mode !== 'dayoff') {
       setIncludedDates([]);
     }
-  }, [mode, periodType, selectedWeekIdx, selectedEmps.length, dates, weeks, leaveEntries]); // Re-run when selection length changes too
+  }, [mode, periodType, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]); // Re-run when selection length changes too
 
   const handleSave = () => {
     if (activeDates.length === 0) {
