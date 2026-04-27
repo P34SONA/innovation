@@ -449,6 +449,7 @@ function AdminView({ data, user, refresh }: any) {
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
   const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
+  const [autoRotate, setAutoRotate] = useState(false);
 
   const addAdmin = async () => {
     if (!adminName.trim()) return;
@@ -490,19 +491,25 @@ function AdminView({ data, user, refresh }: any) {
       }
 
       let curr = new Date(dutyFrom + 'T00:00:00');
-      const end = new Date(dutyTo + 'T00:00:00');
+      let targetTo = dutyTo;
+      if (autoRotate) {
+        const d = new Date(dutyFrom + 'T00:00:00');
+        d.setDate(d.getDate() + 29); // 30 days total
+        targetTo = formatDate(d);
+      }
+      const end = new Date(targetTo + 'T00:00:00');
       let index = 0;
 
       while (curr <= end) {
         const ds = formatDate(curr);
         const currentTask = index % 2 === 0 ? assignTask : (assignTask === 'SDP' ? 'DELTA' : 'SDP');
-        const isAuto = index > 0;
+        const isAuto = index > 0 || autoRotate;
 
         const { data: res, error } = await getSb().from('assignments').insert({
           task_name: currentTask,
           duty_from: ds,
           duty_to: ds,
-          added_by: isAuto ? `${user.name} (Auto)` : user.name
+          added_by: isAuto ? `${user.name} (Auto-Swap)` : user.name
         }).select('id').single();
 
         if (!error && res) {
@@ -563,6 +570,7 @@ function AdminView({ data, user, refresh }: any) {
     setDutyTo(getTodayStr());
     setSelectedEmployees([]);
     setEditingAssignment(null);
+    setAutoRotate(false);
   };
 
   const handleEdit = (a: any) => {
@@ -608,6 +616,69 @@ function AdminView({ data, user, refresh }: any) {
     const { error: e2 } = await getSb().from('assignments').delete().eq('id', id);
     if (e2) alert(e2.message);
     else refresh();
+  };
+
+  useEffect(() => {
+    if (user.isAdmin) {
+      const timer = setTimeout(() => {
+        checkDailyAutoSwap();
+      }, 2000); // Wait for data to settle
+      return () => clearTimeout(timer);
+    }
+  }, [data.assignments.length]);
+
+  const checkDailyAutoSwap = async () => {
+    if (!user.isAdmin) return;
+    
+    const today = getTodayStr();
+    const yesterday = getYesterdayStr();
+    
+    // Find SDP/DELTA assignments from yesterday marked for auto-swap
+    const yesterdayAssignments = data.assignments.filter((a: any) => 
+      (a.task === 'SDP' || a.task === 'DELTA') && 
+      a.dutyTo === yesterday && 
+      (a.addedBy.includes('(Auto-Swap)') || a.addedBy.includes('(Auto)'))
+    );
+
+    if (yesterdayAssignments.length === 0) return;
+
+    for (const a of yesterdayAssignments) {
+      // Check if ANY of these employees already have an assignment today
+      const alreadyAssigned = a.employees.some((empName: string) => 
+        data.assignments.some((todayA: any) => 
+          todayA.dutyFrom <= today && 
+          todayA.dutyTo >= today && 
+          todayA.employees.includes(empName)
+        )
+      );
+
+      if (!alreadyAssigned) {
+        console.log(`Auto-swapping ${a.task} for today (${today})...`);
+        await swapAndClone(a, today);
+      }
+    }
+  };
+
+  const swapAndClone = async (a: any, targetDate?: string) => {
+    const nextTask = a.task === 'SDP' ? 'DELTA' : 'SDP';
+    const ds = targetDate || (() => {
+      const d = new Date(a.dutyTo + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      return formatDate(d);
+    })();
+
+    const { data: res, error } = await getSb().from('assignments').insert({
+      task_name: nextTask,
+      duty_from: ds,
+      duty_to: ds,
+      added_by: a.addedBy.includes('(Auto-Swap)') ? a.addedBy : `${user.name} (Auto-Swap)`
+    }).select('id').single();
+
+    if (error) return;
+
+    const rows = a.employees.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
+    await getSb().from('assignment_employees').insert(rows);
+    refresh();
   };
 
   return (
@@ -723,6 +794,20 @@ function AdminView({ data, user, refresh }: any) {
                 </div>
               </div>
             </div>
+            {(assignTask === 'SDP' || assignTask === 'DELTA') && (
+              <div className="flex items-center gap-3 p-3 bg-[var(--accent)]/5 border border-[var(--accent)]/10 rounded-xl">
+                <input 
+                  type="checkbox" 
+                  id="autoRotate"
+                  checked={autoRotate}
+                  onChange={e => setAutoRotate(e.target.checked)}
+                  className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg)] text-[var(--accent)]"
+                />
+                <label htmlFor="autoRotate" className="text-[10px] font-bold text-[var(--text)] uppercase tracking-wider cursor-pointer">
+                  Enable Auto-Swap (Daily SDP/DELTA) for 30 Days
+                </label>
+              </div>
+            )}
           </div>
           
           <div className="flex flex-col">
@@ -917,6 +1002,15 @@ function AdminView({ data, user, refresh }: any) {
                   <td className="px-6 py-4 text-[11px] text-[var(--accent)] font-mono">{a.addedBy}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {(a.task === 'SDP' || a.task === 'DELTA') && (
+                        <button 
+                          onClick={() => swapAndClone(a)}
+                          className="p-2 hover:bg-[var(--accent)]/10 rounded-lg text-[var(--accent2)] hover:text-[var(--accent)] transition-colors"
+                          title="Generate Next Day Swapped Assignment"
+                        >
+                          <Zap size={16} />
+                        </button>
+                      )}
                       <button 
                         onClick={() => handleEdit(a)}
                         className="p-2 hover:bg-[var(--accent)]/10 rounded-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
