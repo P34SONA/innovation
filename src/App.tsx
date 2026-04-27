@@ -20,7 +20,8 @@ import {
   Moon,
   Palette,
   PaintBucket,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -31,6 +32,12 @@ import {
   setSb,
   getSb
 } from './lib/supabase';
+import { 
+  getPHTTodayStr, 
+  getPHTYesterdayStr, 
+  analyzeAndProjectAssignments,
+  askAIAboutTaskRotation
+} from './services/automationService';
 import type { 
   Admin, 
   Employee, 
@@ -52,24 +59,17 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const getTodayStr = () => {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-};
-
-const getYesterdayStr = () => {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 1);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-};
+const getTodayStr = () => getPHTTodayStr();
+const getYesterdayStr = () => getPHTYesterdayStr();
 
 const formatDate = (date: Date) => {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
 const getMonthStr = () => {
   const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  // Adjust for PHT for consistency in month strings if needed
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 export default function App() {
@@ -144,7 +144,7 @@ export default function App() {
       aeMap[r.assignment_id].push(r.employee_name);
     });
 
-    setData({
+    const newData = {
       admins: (adm.data || []).map((r: any) => r.name),
       employees: (emp.data || []).map((r: any) => r.name),
       tasks: (tsk.data || []).map((r: any) => r.name),
@@ -160,8 +160,103 @@ export default function App() {
       shiftTypes: sht.data || [],
       scheduleEntries: se.data || [],
       leaveEntries: lv.data || []
-    });
+    };
+
+    setData(newData);
+    return newData;
   };
+
+  const runAutomation = useCallback(async (currentData: any) => {
+    if (!user || user.isGuest) return;
+    
+    const today = getTodayStr();
+    
+    // 1. SDP/DELTA Auto-Swap & Gap Filling
+    const projections = await analyzeAndProjectAssignments(currentData.assignments, currentData.employees, today);
+    
+    if (projections.length > 0) {
+      console.log(`AI Automation: Projecting ${projections.length} missing assignments...`);
+      for (const p of projections) {
+        const { data: res, error } = await getSb().from('assignments').insert({
+          task_name: p.task_name,
+          duty_from: p.duty_from,
+          duty_to: p.duty_to,
+          added_by: p.added_by
+        }).select('id').single();
+        
+        if (!error && res) {
+          const rows = p.employees.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
+          await getSb().from('assignment_employees').insert(rows);
+        }
+      }
+      fetchAllData(getSb());
+    }
+
+    // 2. ELOAD Auto-Pick (Moved from AdminView to be fully automatic)
+    const eloadAlreadyAssigned = currentData.assignments.some((a: any) => 
+      a.task === 'ELOAD' && a.dutyFrom <= today && a.dutyTo >= today
+    );
+    
+    if (!eloadAlreadyAssigned && currentData.employees.length > 0) {
+      const excluded = ['Amy', 'Rojen', 'Jen', 'Charmaine'];
+      const eligible = currentData.employees.filter((e: string) => !excluded.includes(e));
+      
+      if (eligible.length > 0) {
+        const eloadHistory = currentData.assignments
+          .filter((a: any) => a.task === 'ELOAD')
+          .sort((a: any, b: any) => b.dutyFrom.localeCompare(a.dutyFrom));
+
+        const recentlyPicked = new Set();
+        for (const a of eloadHistory) {
+          for (const e of a.employees) {
+            if (recentlyPicked.size < eligible.length - 1) {
+              if (eligible.includes(e)) recentlyPicked.add(e);
+            } else break;
+          }
+          if (recentlyPicked.size >= eligible.length - 1) break;
+        }
+
+        const busyToday = [
+          ...currentData.leaveEntries.filter((l: any) => l.schedule_date === today).map((l: any) => l.employee_name),
+          ...currentData.scheduleEntries.filter((s: any) => {
+            const shift = currentData.shiftTypes.find((st: any) => st.id === s.shift_type_id);
+            return s.schedule_date === today && shift?.name === '10:00PM - 6:00AM';
+          }).map((s: any) => s.employee_name)
+        ];
+
+        const availablePool = eligible.filter((e: string) => !recentlyPicked.has(e));
+        let candidates = availablePool.filter(e => !busyToday.includes(e));
+        if (candidates.length === 0) candidates = eligible.filter(e => !busyToday.includes(e));
+
+        if (candidates.length > 0) {
+          const winner = candidates[Math.floor(Math.random() * candidates.length)];
+          const { data: res, error } = await getSb().from('assignments').insert({
+            task_name: 'ELOAD',
+            duty_from: today,
+            duty_to: today,
+            added_by: 'Persona (Auto-Pool)'
+          }).select('id').single();
+
+          if (!error && res) {
+            await getSb().from('assignment_employees').insert({
+              assignment_id: res.id,
+              employee_name: winner
+            });
+            fetchAllData(getSb());
+          }
+        }
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (data.assignments.length > 0 && user && !user.isGuest) {
+      const timer = setTimeout(() => {
+        runAutomation(data);
+      }, 5000); // Wait a bit after load to check automation
+      return () => clearTimeout(timer);
+    }
+  }, [data.assignments.length, user, runAutomation]);
 
   useEffect(() => {
     if (config) {
@@ -447,6 +542,16 @@ function AdminView({ data, user, refresh }: any) {
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+
+  const checkAI = async () => {
+    setLoadingAI(true);
+    const result = await askAIAboutTaskRotation(data.assignments);
+    setAiStatus(result);
+    setLoadingAI(false);
+  };
+
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
   const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
@@ -630,127 +735,6 @@ function AdminView({ data, user, refresh }: any) {
     const { error: e2 } = await getSb().from('assignments').delete().eq('id', id);
     if (e2) alert(e2.message);
     else refresh();
-  };
-
-  useEffect(() => {
-    if (user.isAdmin) {
-      const timer = setTimeout(() => {
-        checkDailyAutoSwap();
-        checkDailyEloadPick();
-      }, 2000); // Wait for data to settle
-      return () => clearTimeout(timer);
-    }
-  }, [data.assignments.length]);
-
-  const checkDailyAutoSwap = async () => {
-    if (!user.isAdmin) return;
-    
-    const today = getTodayStr();
-    const yesterday = getYesterdayStr();
-    
-    // Monthly Validity Check: if month changes, stop auto-swap
-    if (today.substring(0, 7) !== yesterday.substring(0, 7)) {
-      console.log('Month ended. Admin must re-assign to continue auto-swap.');
-      return;
-    }
-    
-    // Find SDP/DELTA assignments from yesterday marked for auto-swap
-    const yesterdayAssignments = data.assignments.filter((a: any) => 
-      (a.task === 'SDP' || a.task === 'DELTA') && 
-      a.dutyTo === yesterday && 
-      (a.addedBy.includes('(Auto-Swap)') || a.addedBy.includes('(Auto)'))
-    );
-
-    if (yesterdayAssignments.length === 0) return;
-
-    for (const a of yesterdayAssignments) {
-      // Check if ANY of these employees already have an assignment today
-      const alreadyAssigned = a.employees.some((empName: string) => 
-        data.assignments.some((todayA: any) => 
-          todayA.dutyFrom <= today && 
-          todayA.dutyTo >= today && 
-          todayA.employees.includes(empName)
-        )
-      );
-
-      if (!alreadyAssigned) {
-        console.log(`Auto-swapping ${a.task} for today (${today})...`);
-        await swapAndClone(a, today);
-      }
-    }
-  };
-  
-  const checkDailyEloadPick = async () => {
-    if (!user.isAdmin) return;
-    const today = getTodayStr();
-    
-    // Check if ELOAD already assigned today
-    const alreadyAssignedToday = data.assignments.some((a: any) => 
-      a.task === 'ELOAD' && a.dutyFrom <= today && a.dutyTo >= today
-    );
-    if (alreadyAssignedToday) return;
-
-    // Eligible employees
-    const excluded = ['Amy', 'Rojen', 'Jen', 'Charmaine'];
-    const eligible = data.employees.filter((e: string) => !excluded.includes(e));
-    if (eligible.length === 0) return;
-
-    // Find all previous ELOAD assignments to determine the current cycle progress
-    const eloadAssignments = data.assignments
-      .filter((a: any) => a.task === 'ELOAD')
-      .sort((a: any, b: any) => b.dutyFrom.localeCompare(a.dutyFrom)); // Newest first
-
-    // We track who was picked in the most recent cycle
-    // A cycle is complete when N unique eligible employees have been picked
-    const recentlyPicked = new Set();
-    for (const a of eloadAssignments) {
-      for (const e of a.employees) {
-        if (recentlyPicked.size < eligible.length - 1) {
-          if (eligible.includes(e)) {
-            recentlyPicked.add(e);
-          }
-        } else break;
-      }
-      if (recentlyPicked.size >= eligible.length - 1) break;
-    }
-
-    const onLeaveOrNightShiftToday = [
-      ...data.leaveEntries.filter((l: any) => l.schedule_date === today).map((l: any) => l.employee_name),
-      ...data.scheduleEntries.filter((s: any) => {
-        const shift = data.shiftTypes.find(st => st.id === s.shift_type_id);
-        return s.schedule_date === today && shift?.name === '10:00PM - 6:00AM';
-      }).map((s: any) => s.employee_name)
-    ];
-
-    const availablePool = eligible.filter((e: string) => !recentlyPicked.has(e));
-    
-    // Candidates: preferred pool members who are NOT on leave or night shift today
-    let candidates = availablePool.filter(e => !onLeaveOrNightShiftToday.includes(e));
-    
-    // If everyone in the preferred pool is off today, pick from any eligible employee who is ON duty
-    if (candidates.length === 0) {
-      candidates = eligible.filter(e => !onLeaveOrNightShiftToday.includes(e));
-    }
-
-    if (candidates.length === 0) return; // No one available at all today
-    
-    // Pick one randomly
-    const winner = candidates[Math.floor(Math.random() * candidates.length)];
-
-    const { data: res, error } = await getSb().from('assignments').insert({
-      task_name: 'ELOAD',
-      duty_from: today,
-      duty_to: today,
-      added_by: `${user.name} (Auto-Pool)`
-    }).select('id').single();
-
-    if (!error && res) {
-      await getSb().from('assignment_employees').insert({
-        assignment_id: res.id,
-        employee_name: winner
-      });
-      refresh();
-    }
   };
 
   const swapAndClone = async (a: any, targetDate?: string) => {
@@ -1030,7 +1014,15 @@ function AdminView({ data, user, refresh }: any) {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-serif text-2xl">Assignment History</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={checkAI}
+              disabled={loadingAI}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-500 hover:text-white transition-all shadow-lg shadow-emerald-500/5"
+            >
+              <Sparkles size={14} className={loadingAI ? "animate-pulse" : ""} />
+              {loadingAI ? 'Analyzing...' : 'Analyze Rotation Logic'}
+            </button>
             <button 
               onClick={bulkDeleteAssignments}
               className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
@@ -1040,6 +1032,29 @@ function AdminView({ data, user, refresh }: any) {
             <span className="text-[10px] font-mono bg-[var(--surface2)] px-3 py-1 rounded-full border border-[var(--border)] text-[var(--muted)]">{filteredHistory.length} records</span>
           </div>
         </div>
+
+        {aiStatus && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-6 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.1),transparent)] border border-emerald-500/20 rounded-2xl p-5 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-2">
+              <button onClick={() => setAiStatus(null)} className="text-emerald-500/40 hover:text-emerald-500 transition-colors"><X size={14} /></button>
+            </div>
+            <div className="flex gap-4 items-start">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <Brain className="text-emerald-400" size={20} />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase font-black tracking-[2px] text-emerald-400/60">Persona AI Analysis</div>
+                <div className="text-sm text-emerald-100/90 leading-relaxed font-medium">
+                  {aiStatus}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
         
         <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
