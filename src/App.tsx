@@ -714,18 +714,22 @@ function AdminView({ data, user, refresh }: any) {
       if (recentlyPicked.size >= eligible.length - 1) break;
     }
 
-    const onLeaveToday = data.leaveEntries
-      .filter((l: any) => l.schedule_date === today)
-      .map((l: any) => l.employee_name);
+    const onLeaveOrNightShiftToday = [
+      ...data.leaveEntries.filter((l: any) => l.schedule_date === today).map((l: any) => l.employee_name),
+      ...data.scheduleEntries.filter((s: any) => {
+        const shift = data.shiftTypes.find(st => st.id === s.shift_type_id);
+        return s.schedule_date === today && shift?.name === '10:00PM - 6:00AM';
+      }).map((s: any) => s.employee_name)
+    ];
 
     const availablePool = eligible.filter((e: string) => !recentlyPicked.has(e));
     
-    // Candidates: preferred pool members who are NOT on leave today
-    let candidates = availablePool.filter(e => !onLeaveToday.includes(e));
+    // Candidates: preferred pool members who are NOT on leave or night shift today
+    let candidates = availablePool.filter(e => !onLeaveOrNightShiftToday.includes(e));
     
     // If everyone in the preferred pool is off today, pick from any eligible employee who is ON duty
     if (candidates.length === 0) {
-      candidates = eligible.filter(e => !onLeaveToday.includes(e));
+      candidates = eligible.filter(e => !onLeaveOrNightShiftToday.includes(e));
     }
 
     if (candidates.length === 0) return; // No one available at all today
@@ -1163,6 +1167,29 @@ function TaskView({ data, user }: any) {
   const [filter, setFilter] = useState<'current' | 'history'>('current');
   const today = getTodayStr();
   const currentYear = new Date().getUTCFullYear().toString();
+
+  const getActiveEmployees = (employees: string[], date: string) => {
+    if (user.isAdmin) return employees;
+    return employees.filter((e: string) => {
+      // Hide if on ANY leave (Dayoff, PAL, etc.)
+      const isOnLeave = data.leaveEntries.some((l: any) => 
+        l.employee_name === e && 
+        l.schedule_date === date
+      );
+      if (isOnLeave) return false;
+
+      // Hide if on 10PM Shift
+      const is10PmShift = data.scheduleEntries.some((s: any) => {
+        const shift = data.shiftTypes.find(st => st.id === s.shift_type_id);
+        return s.employee_name === e && 
+               s.schedule_date === date && 
+               shift?.name === '10:00PM - 6:00AM';
+      });
+      if (is10PmShift) return false;
+
+      return true;
+    });
+  };
   
   const palUsed = data.leaveEntries.filter((l: any) => l.employee_name === user.name && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
 
@@ -1206,14 +1233,7 @@ function TaskView({ data, user }: any) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tasks.map((a: any) => {
             const checkDate = filter === 'current' ? today : a.dutyFrom;
-            const activeEmps = a.employees.filter((e: string) => {
-              if (user.isAdmin) return true;
-              return !data.leaveEntries.some((l: any) => 
-                l.employee_name === e && 
-                l.leave_type === 'Dayoff' && 
-                l.schedule_date === checkDate
-              );
-            });
+            const activeEmps = getActiveEmployees(a.employees, checkDate);
             const isMe = activeEmps.includes(user.name);
             const isToday = a.dutyFrom <= today && a.dutyTo >= today;
             return (
