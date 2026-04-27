@@ -433,6 +433,7 @@ function TabButton({ active, onClick, icon, label }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AdminView({ data, user, refresh }: any) {
+  const today = getTodayStr();
   const [adminName, setAdminName] = useState('');
   const [empName, setEmpName] = useState('');
   const [taskName, setTaskName] = useState('');
@@ -595,18 +596,31 @@ function AdminView({ data, user, refresh }: any) {
   };
 
   const filteredHistory = data.assignments.filter((a: any) => {
-    const yesterday = getYesterdayStr();
-    if (a.dutyTo < yesterday) return false;
+    const today = getTodayStr();
+    
+    // If no manual date filter is set, default to only showing tasks active today
+    if (!historyFilter.from && !historyFilter.to) {
+      if (a.dutyFrom > today || a.dutyTo < today) return false;
+    } else {
+      // If manual filter is set, allow seeing that range
+      const overlaps = (f: string, t: string, af: string, at: string) => {
+        if (f && at < f) return false;
+        if (t && af > t) return false;
+        return true;
+      };
+      if (!overlaps(historyFilter.from, historyFilter.to, a.dutyFrom, a.dutyTo)) return false;
+    }
 
-    const overlaps = (f: string, t: string, af: string, at: string) => {
-      if (f && at < f) return false;
-      if (t && af > t) return false;
-      return true;
-    };
-    if (!overlaps(historyFilter.from, historyFilter.to, a.dutyFrom, a.dutyTo)) return false;
     if (historyFilter.task && a.task !== historyFilter.task) return false;
     if (historyFilter.emp && !a.employees.includes(historyFilter.emp)) return false;
     return true;
+  }).sort((a: any, b: any) => {
+    const today = getTodayStr();
+    const isAToday = a.dutyFrom <= today && a.dutyTo >= today;
+    const isBToday = b.dutyFrom <= today && b.dutyTo >= today;
+    if (isAToday && !isBToday) return -1;
+    if (!isAToday && isBToday) return 1;
+    return b.dutyFrom.localeCompare(a.dutyFrom); // Descending date
   });
 
   const deleteAssignment = async (id: string) => {
@@ -973,16 +987,27 @@ function AdminView({ data, user, refresh }: any) {
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-[var(--border)]">
-              {filteredHistory.map((a: any) => (
-                <tr key={a.id} className="hover:bg-white/[0.02] group">
-                  <td className="px-6 py-4 font-bold">
-                    <span className={`px-2 py-1 rounded-md ${
-                      a.task === 'SDP' ? 'text-emerald-400 bg-emerald-500/5' :
-                      a.task === 'DELTA' ? 'text-cyan-400 bg-cyan-500/5' :
-                      ''
-                    }`}>{a.task}</span>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-[11px] text-[var(--muted)]">{a.dutyFrom} → {a.dutyTo}</td>
+              {filteredHistory.map((a: any) => {
+                const isToday = a.dutyFrom <= today && a.dutyTo >= today;
+                return (
+                  <tr key={a.id} className={`hover:bg-white/[0.02] group transition-colors ${isToday ? 'bg-[var(--accent)]/[0.03]' : ''}`}>
+                    <td className="px-6 py-4 font-bold">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded-md ${
+                          a.task === 'SDP' ? 'text-emerald-400 bg-emerald-500/5' :
+                          a.task === 'DELTA' ? 'text-cyan-400 bg-cyan-500/5' :
+                          ''
+                        }`}>{a.task}</span>
+                        {isToday && (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--accent)] text-black text-[8px] font-black uppercase shadow-[0_0_10px_rgba(234,179,8,0.3)]">
+                            Live
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className={`px-6 py-4 font-mono text-[11px] ${isToday ? 'text-[var(--accent)] font-bold' : 'text-[var(--muted)]'}`}>
+                      {a.dutyFrom} → {a.dutyTo}
+                    </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1.5">
                       {a.employees.map((e: string) => (
@@ -1028,7 +1053,8 @@ function AdminView({ data, user, refresh }: any) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1054,7 +1080,7 @@ function TaskView({ data, user }: any) {
   const palUsed = data.leaveEntries.filter((l: any) => l.employee_name === user.name && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
 
   const tasks = data.assignments.filter((a: any) => {
-    if (filter === 'current') return a.dutyTo >= today;
+    if (filter === 'current') return a.dutyFrom <= today && a.dutyTo >= today;
     return a.dutyTo < today;
   }).sort((a: any, b: any) => {
     if (filter === 'current') return a.dutyFrom.localeCompare(b.dutyFrom);
@@ -1088,7 +1114,7 @@ function TaskView({ data, user }: any) {
           onClick={() => setFilter('current')}
           className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'current' ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
         >
-          📌 Current & Upcoming
+          ✨ Today's Task
         </button>
         <button 
           onClick={() => setFilter('history')}
@@ -1108,18 +1134,30 @@ function TaskView({ data, user }: any) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tasks.map((a: any) => {
             const isMe = a.employees.includes(user.name);
+            const isToday = a.dutyFrom <= today && a.dutyTo >= today;
             return (
               <div 
                 key={a.id} 
                 className={`group relative bg-[var(--surface)] border rounded-[20px] overflow-hidden transition-all hover:-translate-y-1 hover:shadow-2xl ${
-                  isMe ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' : 'border-[var(--border)] hover:border-[var(--accent)]'
+                  isToday 
+                    ? 'border-[var(--accent)] shadow-[0_0_20px_rgba(234,179,8,0.15)] bg-[var(--accent)]/[0.03]' 
+                    : isMe 
+                      ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' 
+                      : 'border-[var(--border)] hover:border-[var(--accent)]'
                 }`}
               >
-                <div className="bg-[var(--surface2)] p-5 border-b border-[var(--border)] flex justify-between items-start gap-4">
+                <div className={`p-5 border-b border-[var(--border)] flex justify-between items-start gap-4 ${isToday ? 'bg-[var(--accent)]/5' : 'bg-[var(--surface2)]'}`}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-lg font-bold truncate">{a.task}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-lg font-bold truncate">{a.task}</div>
+                      {isToday && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--accent)] text-black text-[8px] font-black uppercase animate-pulse">
+                          Live
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-[var(--muted)]">
-                      <Calendar size={12} className="text-white" />
+                      <Calendar size={12} className={isToday ? "text-[var(--accent)]" : "text-white"} />
                       {a.dutyFrom} → {a.dutyTo}
                     </div>
                   </div>
