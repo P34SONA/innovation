@@ -695,6 +695,17 @@ function AdminView({ data, user, refresh }: any) {
     refresh();
   };
 
+  const bulkDeleteAssignments = async () => {
+    if (!confirm('Are you absolutely sure you want to CLEAR ALL assignment history? This cannot be undone.')) return;
+    
+    // Cascading delete relies on foreign key, but we'll be explicit
+    const { error: e1 } = await getSb().from('assignment_employees').delete().neq('employee_name', '');
+    const { error: e2 } = await getSb().from('assignments').delete().neq('task_name', '');
+
+    if (e1 || e2) alert('Failed to clear assignments');
+    else refresh();
+  };
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -727,19 +738,11 @@ function AdminView({ data, user, refresh }: any) {
             <button onClick={addEmployee} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {data.employees.map((e: string) => {
-              const currentYear = new Date().getFullYear().toString();
-              const used = data.leaveEntries.filter(l => l.employee_name === e && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
-              const remaining = Math.max(0, MAX_VL - used);
-              return (
-                <div key={e} className="flex flex-col items-center bg-[var(--accent2)]/5 border border-[var(--accent2)]/20 px-3 py-1.5 rounded-xl min-w-[100px]">
-                  <span className="text-xs font-mono text-[var(--accent2)] font-bold">{e}</span>
-                  <span className={`text-[10px] font-bold ${remaining === 0 ? 'text-red-400' : 'text-[var(--muted)]'}`}>
-                    {remaining} / {MAX_VL} Left
-                  </span>
-                </div>
-              );
-            })}
+            {data.employees.map((e: string) => (
+              <div key={e} className="flex flex-col items-center bg-[var(--accent2)]/5 border border-[var(--accent2)]/20 px-3 py-1.5 rounded-xl min-w-[100px]">
+                <span className="text-xs font-mono text-[var(--accent2)] font-bold">{e}</span>
+              </div>
+            ))}
           </div>
         </Card>
 
@@ -947,7 +950,15 @@ function AdminView({ data, user, refresh }: any) {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-serif text-2xl">Assignment History</h2>
-          <span className="text-[10px] font-mono bg-[var(--surface2)] px-3 py-1 rounded-full border border-[var(--border)] text-[var(--muted)]">{filteredHistory.length} records</span>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={bulkDeleteAssignments}
+              className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
+            >
+              Clear All History
+            </button>
+            <span className="text-[10px] font-mono bg-[var(--surface2)] px-3 py-1 rounded-full border border-[var(--border)] text-[var(--muted)]">{filteredHistory.length} records</span>
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
@@ -1089,24 +1100,9 @@ function TaskView({ data, user }: any) {
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-end">
-        <div>
-          <h1 className="font-serif text-3xl mb-1">Hello, {user.name}! 👋</h1>
-          <p className="text-[var(--muted)]">All task assignments across the team.</p>
-        </div>
-        {!user.isGuest && (
-          <div className="bg-[var(--surface)] border border-[var(--border)] p-4 rounded-2xl flex items-center gap-6">
-            <div className="text-center">
-              <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">Leave Balance</div>
-              <div className="text-xl font-serif text-[var(--accent)]">{MAX_VL - palUsed} <span className="text-xs text-[var(--muted)]">Days</span></div>
-            </div>
-            <div className="h-10 w-px bg-[var(--border)]" />
-            <div className="text-center">
-              <div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider mb-1">Total Entitled</div>
-              <div className="text-xl font-serif">{MAX_VL} <span className="text-xs text-[var(--muted)]">Days</span></div>
-            </div>
-          </div>
-        )}
+      <div className="mb-8">
+        <h1 className="font-serif text-3xl mb-1">Hello, {user.name}! 👋</h1>
+        <p className="text-[var(--muted)]">All task assignments across the team.</p>
       </div>
 
       <div className="flex gap-2 mb-8 bg-[var(--surface)] p-1 rounded-xl border border-[var(--border)] w-fit">
