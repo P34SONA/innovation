@@ -636,6 +636,7 @@ function AdminView({ data, user, refresh }: any) {
     if (user.isAdmin) {
       const timer = setTimeout(() => {
         checkDailyAutoSwap();
+        checkDailyEloadPick();
       }, 2000); // Wait for data to settle
       return () => clearTimeout(timer);
     }
@@ -670,6 +671,75 @@ function AdminView({ data, user, refresh }: any) {
         console.log(`Auto-swapping ${a.task} for today (${today})...`);
         await swapAndClone(a, today);
       }
+    }
+  };
+  
+  const checkDailyEloadPick = async () => {
+    if (!user.isAdmin) return;
+    const today = getTodayStr();
+    
+    // Check if ELOAD already assigned today
+    const alreadyAssignedToday = data.assignments.some((a: any) => 
+      a.task === 'ELOAD' && a.dutyFrom <= today && a.dutyTo >= today
+    );
+    if (alreadyAssignedToday) return;
+
+    // Eligible employees
+    const excluded = ['Amy', 'Rojen', 'Jen', 'Charmaine'];
+    const eligible = data.employees.filter((e: string) => !excluded.includes(e));
+    if (eligible.length === 0) return;
+
+    // Find all previous ELOAD assignments to determine the current cycle progress
+    const eloadAssignments = data.assignments
+      .filter((a: any) => a.task === 'ELOAD')
+      .sort((a: any, b: any) => b.dutyFrom.localeCompare(a.dutyFrom)); // Newest first
+
+    // We track who was picked in the most recent cycle
+    // A cycle is complete when N unique eligible employees have been picked
+    const recentlyPicked = new Set();
+    for (const a of eloadAssignments) {
+      for (const e of a.employees) {
+        if (recentlyPicked.size < eligible.length - 1) {
+          if (eligible.includes(e)) {
+            recentlyPicked.add(e);
+          }
+        } else break;
+      }
+      if (recentlyPicked.size >= eligible.length - 1) break;
+    }
+
+    const onLeaveToday = data.leaveEntries
+      .filter((l: any) => l.schedule_date === today)
+      .map((l: any) => l.employee_name);
+
+    const availablePool = eligible.filter((e: string) => !recentlyPicked.has(e));
+    
+    // Candidates: preferred pool members who are NOT on leave today
+    let candidates = availablePool.filter(e => !onLeaveToday.includes(e));
+    
+    // If everyone in the preferred pool is off today, pick from any eligible employee who is ON duty
+    if (candidates.length === 0) {
+      candidates = eligible.filter(e => !onLeaveToday.includes(e));
+    }
+
+    if (candidates.length === 0) return; // No one available at all today
+    
+    // Pick one randomly
+    const winner = candidates[Math.floor(Math.random() * candidates.length)];
+
+    const { data: res, error } = await getSb().from('assignments').insert({
+      task_name: 'ELOAD',
+      duty_from: today,
+      duty_to: today,
+      added_by: `${user.name} (Auto-Pool)`
+    }).select('id').single();
+
+    if (!error && res) {
+      await getSb().from('assignment_employees').insert({
+        assignment_id: res.id,
+        employee_name: winner
+      });
+      refresh();
     }
   };
 
@@ -1129,7 +1199,16 @@ function TaskView({ data, user }: any) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tasks.map((a: any) => {
-            const isMe = a.employees.includes(user.name);
+            const checkDate = filter === 'current' ? today : a.dutyFrom;
+            const activeEmps = a.employees.filter((e: string) => {
+              if (user.isAdmin) return true;
+              return !data.leaveEntries.some((l: any) => 
+                l.employee_name === e && 
+                l.leave_type === 'Dayoff' && 
+                l.schedule_date === checkDate
+              );
+            });
+            const isMe = activeEmps.includes(user.name);
             const isToday = a.dutyFrom <= today && a.dutyTo >= today;
             return (
               <div 
@@ -1169,7 +1248,7 @@ function TaskView({ data, user }: any) {
                 <div className="p-5">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)] mb-3">Assigned Team</div>
                   <div className="flex flex-wrap gap-2">
-                    {a.employees.map((e: string) => (
+                    {activeEmps.map((e: string) => (
                       <div key={e} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border ${
                         e === user.name ? 'bg-[var(--accent)]/10 border-[var(--accent)] text-[var(--accent)] font-bold' : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)]'
                       }`}>
