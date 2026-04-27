@@ -1728,12 +1728,17 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
   // Auto-set included dates when mode, period, or employees change
   useEffect(() => {
-    if ((mode === 'shift' || mode === 'paypro') && selectedEmps.length > 0) {
-      // If we are in month mode (p1/p2), we auto-select the WHOLE month 
-      // so the selection is consistent across tab switches.
-      const targetRange = periodType === 'weekly' ? (weeks[selectedWeekIdx] || []) : dates;
+    if (mode === 'shift' || mode === 'paypro') {
+      const baseRange = periodType === 'weekly' ? (weeks[selectedWeekIdx] || []) : dates;
+      
+      // If no employees, select all in range
+      if (selectedEmps.length === 0) {
+        setIncludedDates(baseRange);
+        return;
+      }
 
-      const autoSelected = targetRange.filter(d => {
+      // If employees selected, exclude their day-offs/leaves
+      const autoSelected = baseRange.filter(d => {
         const hasLeave = selectedEmps.some(emp => 
           (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d)
         );
@@ -1743,7 +1748,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     } else if (mode !== 'dayoff') {
       setIncludedDates([]);
     }
-  }, [mode, periodType, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]); // Re-run when selection length changes too
+  }, [mode, periodType, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]);
 
   const handleSave = () => {
     if (activeDates.length === 0) {
@@ -1805,18 +1810,21 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     }
 
     // mode === 'shift'
+    let shiftConflicts = [];
     for (const d of activeDates) {
+      const hasOtherLeave = (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d);
+      if (hasOtherLeave) return "Leave Conflict";
+
       const entry = (scheduleEntries || []).find((s: any) => s.employee_name === emp && s.schedule_date === d);
       if (entry) {
         const st = shiftTypes.find((t: any) => t.id === entry.shift_type_id);
-        const name = st?.name || "Other Shift";
-        if (name.includes('6:00AM') || name.includes('10:00PM')) {
-          return `Assigned to ${name}`;
-        }
-        return `Assigned: ${name}`;
+        if (st) shiftConflicts.push(st.name);
       }
-      const hasOtherLeave = (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff');
-      if (hasOtherLeave) return "Leave Conflict";
+    }
+
+    if (shiftConflicts.length > 0) {
+      // Just return the first one as info, but it won't be blocked if we handle it in UI
+      return `Already: ${shiftConflicts[0]}`;
     }
 
     return null;
@@ -2046,26 +2054,29 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                 .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
                 .sort()
                 .map((e: string) => {
-                  const conflictReason = checkConflict(e);
-                  const isSelected = selectedEmps.includes(e);
-                  const assignedCount = getEmpAssignedCount(e);
+                    const conflictReason = checkConflict(e);
+                    const isSelected = selectedEmps.includes(e);
+                    const isHardConflict = conflictReason && (conflictReason.includes('Leave') || conflictReason.includes('Limit'));
+                    const assignedCount = getEmpAssignedCount(e);
 
-                  return (
-                    <button 
-                      key={e} 
-                      onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      disabled={!!conflictReason || (mode === 'paypro' && !isSelected && selectedEmps.length >= 2)}
-                      title={conflictReason || (mode === 'paypro' && selectedEmps.length >= 2 ? 'Limit of 2 employees for PayPro' : '')}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group relative ${
-                        isSelected 
-                          ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
-                          : conflictReason || (mode === 'paypro' && selectedEmps.length >= 2)
-                            ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
-                            : mode === 'shift' || mode === 'paypro'
-                              ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
-                              : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
-                      }`}
-                    >
+                    return (
+                      <button 
+                        key={e} 
+                        onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                        disabled={isHardConflict || (mode === 'paypro' && !isSelected && selectedEmps.length >= 2)}
+                        title={conflictReason || (mode === 'paypro' && selectedEmps.length >= 2 ? 'Limit of 2 employees for PayPro' : '')}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold transition-all group relative ${
+                          isSelected 
+                            ? mode === 'dayoff' ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' 
+                            : isHardConflict || (mode === 'paypro' && selectedEmps.length >= 2)
+                              ? 'bg-red-500/10 border-red-500/20 text-red-500/60 opacity-60 cursor-not-allowed grayscale-[0.8]'
+                              : conflictReason && conflictReason.includes('Already')
+                                ? 'bg-orange-500/5 border-orange-500/20 text-orange-400 hover:border-orange-500/50 hover:bg-orange-500/10'
+                                : mode === 'shift' || mode === 'paypro'
+                                  ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10'
+                                  : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
+                        }`}
+                      >
                       <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors ${
                         isSelected 
                           ? 'bg-black/20 border-black/20' 
@@ -2081,7 +2092,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                           {e} {mode === 'paypro' && assignedCount > 0 && <span className="opacity-60 font-mono text-[9px]"> - {assignedCount}</span>}
                         </span>
                         {conflictReason && (
-                          <span className="text-[7px] text-red-400/80 truncate leading-none mt-0.5">{conflictReason}</span>
+                          <span className={`text-[7px] truncate leading-none mt-0.5 ${isHardConflict ? 'text-red-400' : 'text-orange-400'}`}>{conflictReason}</span>
                         )}
                       </div>
                     </button>
