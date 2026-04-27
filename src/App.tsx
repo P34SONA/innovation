@@ -1428,19 +1428,19 @@ function ScheduleView({ data, user, refresh }: any) {
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {data.shiftTypes.map((st: any) => {
-                    const getShiftColor = (name: string) => {
+                    const getCategoryStyles = (name: string) => {
                       const n = name.toLowerCase();
-                      if (n.includes('6:00am')) return 'text-[#4fd1c5]'; 
-                      if (n.includes('8:00am')) return 'text-[#e8c547]';
-                      if (n.includes('10:00pm')) return 'text-[#a78bfa]';
-                      if (n.includes('paypro')) return 'text-[#4ade80]';
-                      return 'text-[var(--muted)]';
+                      if (n.includes('6:00am')) return { text: 'text-[#4fd1c5]', bg: 'bg-[#4fd1c5]/15', border: 'border-[#4fd1c5]/40' }; 
+                      if (n.includes('8:00am')) return { text: 'text-[#e8c547]', bg: 'bg-[#e8c547]/15', border: 'border-[#e8c547]/40' };
+                      if (n.includes('10:00pm')) return { text: 'text-[#a78bfa]', bg: 'bg-[#a78bfa]/15', border: 'border-[#a78bfa]/40' };
+                      if (n.includes('paypro')) return { text: 'text-[#4ade80]', bg: 'bg-[#4ade80]/15', border: 'border-[#4ade80]/40' };
+                      return { text: 'text-[var(--text)]', bg: 'bg-white/5', border: 'border-white/10' };
                     };
-                    const shiftColor = getShiftColor(st.name);
+                    const cat = getCategoryStyles(st.name);
                     
                     return (
                       <tr key={st.id}>
-                        <td className={`px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold ${shiftColor}`}>{st.name}</td>
+                        <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">{st.name}</td>
                         {week.map(d => {
                           const emps = getShiftEmployees(d, st.id);
                           return (
@@ -1448,13 +1448,14 @@ function ScheduleView({ data, user, refresh }: any) {
                               <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
                                 {emps.map(e => {
                                   const isSelf = e === user.name;
+                                  const showColor = user.isAdmin || isSelf;
                                   return (
                                     <span 
                                       key={e} 
-                                      className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
-                                        isSelf 
-                                          ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
-                                          : 'bg-white/5 border-white/10 text-white'
+                                      className={`text-[9px] px-2 py-0.5 rounded-full font-mono border transition-colors ${
+                                        showColor 
+                                          ? `${cat.bg} ${cat.border} ${cat.text} font-bold` 
+                                          : 'bg-white/5 border-white/10 text-white/90'
                                       }`}
                                     >
                                       {e}
@@ -1477,54 +1478,62 @@ function ScheduleView({ data, user, refresh }: any) {
                     );
                   })}
                   <tr className="bg-[var(--surface)]">
-                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[#f9a8d4]">Day Off</td>
-                    {week.map(d => (
-                      <td key={d} className="p-1 border-r border-[var(--border)] group relative">
-                         <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                            {getLeaveEmployees(d, 'Dayoff').map(e => {
-                              const isSelf = e === user.name;
-                              return (
-                                <span 
-                                  key={e} 
-                                  className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
-                                    isSelf 
-                                      ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
-                                      : 'bg-white/5 border-white/10 text-white'
-                                  }`}
-                                >
-                                  {e}
-                                </span>
-                              );
-                            })}
-                            {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Dayoff')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-pink-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-pink-400" /></button>}
-                         </div>
-                      </td>
-                    ))}
+                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Day Off</td>
+                    {week.map(d => {
+                      const doCat = { text: 'text-[#f9a8d4]', bg: 'bg-[#f9a8d4]/15', border: 'border-[#f9a8d4]/40' };
+                      return (
+                        <td key={d} className="p-1 border-r border-[var(--border)] group relative">
+                           <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
+                              {getLeaveEmployees(d, 'Dayoff').map(e => {
+                                const isSelf = e === user.name;
+                                const showColor = user.isAdmin || isSelf;
+                                return (
+                                  <span 
+                                    key={e} 
+                                    className={`text-[9px] px-2 py-0.5 rounded-full font-mono border transition-colors ${
+                                      showColor 
+                                        ? `${doCat.bg} ${doCat.border} ${doCat.text} font-bold` 
+                                        : 'bg-white/5 border-white/10 text-white/90'
+                                    }`}
+                                  >
+                                    {e}
+                                  </span>
+                                );
+                              })}
+                              {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Dayoff')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-pink-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-pink-400" /></button>}
+                           </div>
+                        </td>
+                      );
+                    })}
                   </tr>
                   <tr className="bg-[var(--surface)]">
-                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[#c084fc]">Pre-Approved Leave</td>
-                    {week.map(d => (
-                      <td key={d} className="p-1 border-r border-[var(--border)] group relative">
-                         <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
-                            {getLeaveEmployees(d, 'Pre Approved Leave').map(e => {
-                              const isSelf = e === user.name;
-                              return (
-                                <span 
-                                  key={e} 
-                                  className={`text-[9px] px-2 py-0.5 rounded-full font-mono border ${
-                                    isSelf 
-                                      ? 'bg-[var(--green)]/20 border-[var(--green)]/50 text-[var(--green)]' 
-                                      : 'bg-white/5 border-white/10 text-white'
-                                  }`}
-                                >
-                                  {e}
-                                </span>
-                              );
-                            })}
-                            {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Pre Approved Leave')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-purple-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-purple-400" /></button>}
-                         </div>
-                      </td>
-                    ))}
+                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Pre-Approved Leave</td>
+                    {week.map(d => {
+                      const palCat = { text: 'text-[#c084fc]', bg: 'bg-[#c084fc]/15', border: 'border-[#c084fc]/40' };
+                      return (
+                        <td key={d} className="p-1 border-r border-[var(--border)] group relative">
+                           <div className="flex flex-wrap gap-1 min-h-[40px] justify-center items-center">
+                              {getLeaveEmployees(d, 'Pre Approved Leave').map(e => {
+                                const isSelf = e === user.name;
+                                const showColor = user.isAdmin || isSelf;
+                                return (
+                                  <span 
+                                    key={e} 
+                                    className={`text-[9px] px-2 py-0.5 rounded-full font-mono border transition-colors ${
+                                      showColor 
+                                        ? `${palCat.bg} ${palCat.border} ${palCat.text} font-bold` 
+                                        : 'bg-white/5 border-white/10 text-white/90'
+                                    }`}
+                                  >
+                                    {e}
+                                  </span>
+                                );
+                              })}
+                              {user.isAdmin && <button onClick={() => handleCellClick(d, undefined, 'Pre Approved Leave')} className="opacity-0 group-hover:opacity-100 absolute inset-0 flex items-center justify-center bg-purple-500/10 backdrop-blur-[2px] transition-opacity"><Plus size={16} className="text-purple-400" /></button>}
+                           </div>
+                        </td>
+                      );
+                    })}
                   </tr>
                 </tbody>
               </table>
