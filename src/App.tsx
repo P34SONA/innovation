@@ -54,22 +54,22 @@ const MONTH_NAMES = [
 
 const getTodayStr = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 };
 
 const getYesterdayStr = () => {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  d.setUTCDate(d.getUTCDate() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 };
 
 const formatDate = (date: Date) => {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 };
 
 const getMonthStr = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 
 export default function App() {
@@ -648,6 +648,12 @@ function AdminView({ data, user, refresh }: any) {
     const today = getTodayStr();
     const yesterday = getYesterdayStr();
     
+    // Monthly Validity Check: if month changes, stop auto-swap
+    if (today.substring(0, 7) !== yesterday.substring(0, 7)) {
+      console.log('Month ended. Admin must re-assign to continue auto-swap.');
+      return;
+    }
+    
     // Find SDP/DELTA assignments from yesterday marked for auto-swap
     const yesterdayAssignments = data.assignments.filter((a: any) => 
       (a.task === 'SDP' || a.task === 'DELTA') && 
@@ -1156,7 +1162,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function TaskView({ data, user }: any) {
   const [filter, setFilter] = useState<'current' | 'history'>('current');
   const today = getTodayStr();
-  const currentYear = new Date().getFullYear().toString();
+  const currentYear = new Date().getUTCFullYear().toString();
   
   const palUsed = data.leaveEntries.filter((l: any) => l.employee_name === user.name && l.leave_type === 'Pre Approved Leave' && l.schedule_date.startsWith(currentYear)).length;
 
@@ -2451,8 +2457,8 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
 
 function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
   const [selectedEmp, setSelectedEmp] = useState('');
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [activeMonth, setActiveMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getUTCFullYear());
+  const [activeMonth, setActiveMonth] = useState(new Date().getUTCMonth());
   const [selectedDates, setSelectedDates] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
 
@@ -2865,7 +2871,7 @@ function LeaveView({ data, user, refresh }: any) {
 }
 
 function SkillsView({ user }: any) {
-  const [curYear, setCurYear] = useState(new Date().getFullYear());
+  const [curYear, setCurYear] = useState(new Date().getUTCFullYear());
   const [skills, setSkills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
