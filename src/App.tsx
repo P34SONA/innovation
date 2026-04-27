@@ -1811,9 +1811,11 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
     // mode === 'shift'
     let shiftConflicts = [];
+    let leaveCount = 0;
+    
     for (const d of activeDates) {
       const hasOtherLeave = (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d);
-      if (hasOtherLeave) return "Leave Conflict";
+      if (hasOtherLeave) leaveCount++;
 
       const entry = (scheduleEntries || []).find((s: any) => s.employee_name === emp && s.schedule_date === d);
       if (entry) {
@@ -1822,8 +1824,11 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       }
     }
 
+    if (leaveCount === activeDates.length && activeDates.length > 0) {
+      return "Full Period Leave";
+    }
+
     if (shiftConflicts.length > 0) {
-      // Just return the first one as info, but it won't be blocked if we handle it in UI
       return `Already: ${shiftConflicts[0]}`;
     }
 
