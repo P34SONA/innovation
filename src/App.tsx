@@ -2669,11 +2669,15 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
   const [selectedYear, setSelectedYear] = useState(new Date().getUTCFullYear());
   const [activeMonth, setActiveMonth] = useState(new Date().getUTCMonth());
   const [selectedDates, setSelectedDates] = useState<{ [key: string]: string }>({});
+  const [dayOffDates, setDayOffDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (selectedEmp) {
       fetchExistingLeaves();
+    } else {
+      setSelectedDates({});
+      setDayOffDates([]);
     }
   }, [selectedEmp, selectedYear]);
 
@@ -2687,11 +2691,17 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
       .filter('schedule_date', 'lte', `${selectedYear}-12-31`);
     
     if (entries) {
-      const datesObj: { [key: string]: string } = {};
+      const palDates: { [key: string]: string } = {};
+      const doDates: string[] = [];
       entries.forEach((e: any) => {
-        datesObj[e.schedule_date] = e.leave_type;
+        if (e.leave_type === 'Pre Approved Leave') {
+          palDates[e.schedule_date] = e.leave_type;
+        } else if (e.leave_type === 'Dayoff') {
+          doDates.push(e.schedule_date);
+        }
       });
-      setSelectedDates(datesObj);
+      setSelectedDates(palDates);
+      setDayOffDates(doDates);
     }
     setLoading(false);
   };
@@ -2847,7 +2857,9 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
                     for (let d = 1; d <= days; d++) {
                       if (Object.keys(next).length >= MAX_VL) break;
                       const dateStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                      next[dateStr] = 'Pre Approved Leave';
+                      if (!dayOffDates.includes(dateStr)) {
+                        next[dateStr] = 'Pre Approved Leave';
+                      }
                     }
                     setSelectedDates(next);
                   }}
@@ -2884,23 +2896,28 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
                 const day = i + 1;
                 const dStr = `${selectedYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const isSelected = !!selectedDates[dStr];
-                const type = selectedDates[dStr];
+                const hasDayOff = dayOffDates.includes(dStr);
                 const isSun = new Date(selectedYear, activeMonth, day).getDay() === 0;
 
                 return (
                   <button
                     key={day}
-                    disabled={!isSelected && palCount >= MAX_VL}
+                    disabled={(!isSelected && palCount >= MAX_VL) || hasDayOff}
                     onClick={() => toggleDate(dStr)}
                     className={`aspect-square flex items-center justify-center text-xs font-mono rounded-lg transition-all border relative group ${
-                      isSelected 
-                        ? 'bg-[var(--accent)] text-black border-[#f0d060] font-bold'
-                        : isSun
-                          ? 'text-red-400 hover:bg-red-400/10 border-transparent disabled:opacity-20'
-                          : 'text-[var(--text)] hover:bg-white/5 border-transparent disabled:opacity-20'
+                      hasDayOff
+                        ? 'bg-pink-500/10 text-pink-400 border-pink-500/30 cursor-not-allowed opacity-40'
+                        : isSelected 
+                          ? 'bg-[var(--accent)] text-black border-[#f0d060] font-bold'
+                          : isSun
+                            ? 'text-red-400 hover:bg-red-400/10 border-transparent disabled:opacity-20'
+                            : 'text-[var(--text)] hover:bg-white/5 border-transparent disabled:opacity-20'
                     }`}
                   >
                     {day}
+                    {hasDayOff && (
+                      <div className="absolute bottom-1 w-1 h-1 rounded-full bg-pink-400" />
+                    )}
                     {isSelected && (
                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#1a1d24] border border-white/20 rounded-full flex items-center justify-center overflow-hidden">
                         <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
