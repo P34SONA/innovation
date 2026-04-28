@@ -678,7 +678,7 @@ function AdminView({ data, user, refresh }: any) {
   };
 
   const getConflictedTask = (e: string) => {
-    if (assignTask === 'GCASH' || assignTask === 'ELOAD') return null;
+    if (assignTask !== 'SDP' && assignTask !== 'DELTA') return null;
     const found = data.assignments.find((a: any) => {
       if (editingAssignment && a.id === editingAssignment.id) return false;
       if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
@@ -1434,7 +1434,9 @@ function ScheduleView({ data, user, refresh }: any) {
       return;
     }
 
-    setShowBulkModal(false);
+    if (leaveType !== 'Dayoff') {
+      setShowBulkModal(false);
+    }
     refresh();
   };
 
@@ -1696,6 +1698,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [shiftId, setShiftId] = useState<number | string>('');
   const [leaveType, setLeaveType] = useState('Dayoff');
   const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('dayoff');
+  const [loading, setLoading] = useState(false);
   const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
@@ -1753,7 +1756,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     }
   }, [mode, periodType, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (activeDates.length === 0) {
       alert('Please select at least one day.');
       return;
@@ -1771,13 +1774,24 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
       return;
     }
     
-    onSave({ 
-      selectedEmps, 
-      shiftId: mode === 'shift' ? shiftId : '', 
-      leaveType: mode === 'dayoff' ? 'Dayoff' : (mode === 'paypro' ? '' : ''),
-      isPayPro: mode === 'paypro',
-      activeDates
-    });
+    setLoading(true);
+    try {
+      await onSave({ 
+        selectedEmps, 
+        shiftId: mode === 'shift' ? shiftId : '', 
+        leaveType: mode === 'dayoff' ? 'Dayoff' : (mode === 'paypro' ? '' : ''),
+        isPayPro: mode === 'paypro',
+        activeDates
+      });
+
+      if (mode === 'dayoff') {
+        setSelectedEmps([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const checkConflict = (emp: string) => {
@@ -1797,7 +1811,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 
     if (mode === 'dayoff') {
       const hasOtherLeave = activeDates.some(d => 
-        (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff')
+        (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d && l.leave_type !== 'Dayoff' && l.leave_type !== 'Pre Approved Leave')
       );
       if (hasOtherLeave) return "Other Leave Conflict";
 
@@ -2119,9 +2133,10 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
           </button>
           <button 
             onClick={handleSave} 
-            className="flex-1 bg-[var(--accent)] text-black py-2.5 rounded-xl text-[10px] font-bold shadow-lg shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95 uppercase tracking-wider"
+            disabled={loading}
+            className={`flex-1 bg-[var(--accent)] text-black py-2.5 rounded-xl text-[10px] font-bold shadow-lg shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95 uppercase tracking-wider ${loading ? 'opacity-50 cursor-wait' : ''}`}
           >
-            Apply Assignment
+            {loading ? 'Processing...' : 'Apply Assignment'}
           </button>
         </div>
       </div>
@@ -2260,6 +2275,7 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
                   return (
                     <button 
                       key={e} 
+                      disabled={!!conflict}
                       onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
                       className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-semibold transition-all ${
                         isSelected 
@@ -2479,7 +2495,8 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
     const otherLeave = leaveEntries?.find((l: any) => 
       l.employee_name === e && 
       l.schedule_date === date && 
-      l.leave_type !== leaveType
+      l.leave_type !== leaveType &&
+      !(leaveType === 'Dayoff' && l.leave_type === 'Pre Approved Leave')
     );
     if (otherLeave) return otherLeave.leave_type;
 
