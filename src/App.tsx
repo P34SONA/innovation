@@ -1440,18 +1440,21 @@ function ScheduleView({ data, user, refresh }: any) {
   };
 
   const handleBulkDelete = async (params: any) => {
-    const { selectedEmps, mode, startDate, endDate } = params;
+    const { selectedEmps, mode, startDate, endDate, dates } = params;
     
-    // Generate dates in YYYY-MM-DD format safely
-    const datesInRange: string[] = [];
-    let curr = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    while (curr <= end) {
-      const year = curr.getFullYear();
-      const month = String(curr.getMonth() + 1).padStart(2, '0');
-      const day = String(curr.getDate()).padStart(2, '0');
-      datesInRange.push(`${year}-${month}-${day}`);
-      curr.setDate(curr.getDate() + 1);
+    let datesInRange: string[] = dates;
+
+    if (!datesInRange) {
+      datesInRange = [];
+      let curr = new Date(startDate + 'T00:00:00');
+      const end = new Date(endDate + 'T00:00:00');
+      while (curr <= end) {
+        const year = curr.getFullYear();
+        const month = String(curr.getMonth() + 1).padStart(2, '0');
+        const day = String(curr.getDate()).padStart(2, '0');
+        datesInRange.push(`${year}-${month}-${day}`);
+        curr.setDate(curr.getDate() + 1);
+      }
     }
 
     if (mode === 'all') {
@@ -2371,6 +2374,7 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
   const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [search, setSearch] = useState('');
+  const [includedDates, setIncludedDates] = useState<string[]>([]);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -2393,16 +2397,43 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
   };
 
   const activeDates = getActiveDates();
-  const startDate = activeDates[0] || '';
-  const endDate = activeDates[activeDates.length - 1] || '';
+  
+  // Set all dates in the current period as selected by default when the period changes
+  useEffect(() => {
+    setIncludedDates(activeDates);
+  }, [periodType]);
 
   const handleSave = () => {
     if (selectedEmps.length === 0) {
       alert('Please select employees.');
       return;
     }
-    if (confirm(`Are you sure you want to delete ${mode} entries for the selected employees and period?`)) {
-      onSave({ selectedEmps, mode, startDate, endDate });
+    if (includedDates.length === 0) {
+      alert('Please select at least one day.');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete ${mode} entries for the selected employees and ${includedDates.length} selected days?`)) {
+      onSave({ selectedEmps, mode, dates: includedDates });
+    }
+  };
+
+  const filteredEmployees = employees
+    .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
+    .sort();
+
+  const toggleAllEmployees = () => {
+    if (selectedEmps.length === filteredEmployees.length) {
+      setSelectedEmps([]);
+    } else {
+      setSelectedEmps(filteredEmployees);
+    }
+  };
+
+  const toggleAllDates = () => {
+    if (includedDates.length === activeDates.length) {
+      setIncludedDates([]);
+    } else {
+      setIncludedDates(activeDates);
     }
   };
 
@@ -2437,7 +2468,15 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
 
         <div className="space-y-8">
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">1. Select Period</label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">1. Select Period</label>
+              <button 
+                onClick={toggleAllDates}
+                className="text-[9px] font-bold uppercase text-[var(--accent)] hover:underline"
+              >
+                {includedDates.length === activeDates.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2 mb-4">
               <button 
                 onClick={() => setPeriodType('p1')}
@@ -2446,16 +2485,25 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
               <button 
                 onClick={() => setPeriodType('p2')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
-              >16–{daysInMonth}</button>
+              >16–30</button>
             </div>
             <div className="flex flex-wrap gap-2 p-4 bg-gray-900/50 rounded-2xl border border-gray-800/50">
               {activeDates.map(d => {
                 const dayName = DAY_NAMES[new Date(d).getDay()];
+                const isSelected = includedDates.includes(d);
                 return (
-                  <div key={d} className="flex flex-col items-center px-3 py-1.5 rounded-xl border border-gray-700 bg-gray-800/40 text-gray-400 text-[10px] font-bold">
+                  <button 
+                    key={d} 
+                    onClick={() => setIncludedDates(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
+                    className={`flex flex-col items-center px-3 py-1.5 rounded-xl border transition-all text-[10px] font-bold ${
+                      isSelected 
+                        ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' 
+                        : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800 hover:border-gray-600'
+                    }`}
+                  >
                     <span className="opacity-60">{dayName}</span>
                     <span className="text-xs">{Number(d.split('-')[2])}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -2463,7 +2511,15 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
 
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">2. Select Employees</label>
+              <div className="flex items-center gap-4">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500">2. Select Employees</label>
+                <button 
+                  onClick={toggleAllEmployees}
+                  className="text-[9px] font-bold uppercase text-[var(--accent)] hover:underline"
+                >
+                  {selectedEmps.length === filteredEmployees.length && filteredEmployees.length > 0 ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
               <div className="relative">
                 <input 
                   type="text" 
@@ -2475,28 +2531,25 @@ function BulkDeleteModal({ employees, onClose, onSave, currentMonth }: any) {
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-2 max-h-60 overflow-y-auto custom-scrollbar">
-              {employees
-                .filter((e: string) => e.toLowerCase().includes(search.toLowerCase()))
-                .sort()
-                .map((e: string) => {
-                  const isSelected = selectedEmps.includes(e);
-                  return (
-                    <button 
-                      key={e} 
-                      onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
-                        isSelected 
-                          ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/10' 
-                          : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-white/20' : 'bg-black/40 border-gray-600'}`}>
-                        {isSelected && <Check size={12} strokeWidth={3} />}
-                      </div>
-                      <span className="flex-1 text-left truncate">{e}</span>
-                    </button>
-                  );
-                })}
+              {filteredEmployees.map((e: string) => {
+                const isSelected = selectedEmps.includes(e);
+                return (
+                  <button 
+                    key={e} 
+                    onClick={() => isSelected ? setSelectedEmps(selectedEmps.filter(x => x !== e)) : setSelectedEmps([...selectedEmps, e])}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs font-semibold transition-all ${
+                      isSelected 
+                        ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/10' 
+                        : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:bg-gray-800/50'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-black/20 border-white/20' : 'bg-black/40 border-gray-600'}`}>
+                      {isSelected && <Check size={12} strokeWidth={3} />}
+                    </div>
+                    <span className="flex-1 text-left truncate">{e}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
