@@ -2960,7 +2960,19 @@ function LeaveView({ data, user, refresh }: any) {
   const [toDate, setToDate] = useState('');
   const [showPlanner, setShowPlanner] = useState(false);
 
-  const monthsLeaves = data.leaveEntries.filter((e: any) => e.schedule_date.startsWith(currentMonth) && e.leave_type !== 'Dayoff');
+  const monthsLeaves = data.leaveEntries
+    .filter((e: any) => e.schedule_date.startsWith(currentMonth) && e.leave_type !== 'Dayoff')
+    .sort((a: any, b: any) => a.schedule_date.localeCompare(b.schedule_date));
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
 
   const addLeave = async () => {
     if (!empId || !fromDate || !toDate) return;
@@ -3056,33 +3068,37 @@ function LeaveView({ data, user, refresh }: any) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-xl shadow-black/20">
         {monthsLeaves.length === 0 ? (
-          <div className="col-span-full py-20 text-center text-[var(--muted)] border-2 border-dashed border-[var(--border)] rounded-3xl">No leave records for this month</div>
+          <div className="py-20 text-center text-[var(--muted)] border-2 border-dashed border-[var(--border)] m-4 rounded-2xl">No leave records for this month</div>
         ) : (
-          monthsLeaves.map((l: any) => (
-            <div key={l.id} className="bg-[var(--surface)] border border-[var(--border)] px-5 py-3 rounded-2xl flex justify-between items-center group">
-              <div className="flex items-center gap-3">
-                <div className="font-bold text-sm">{l.employee_name}</div>
-                <div className="text-[var(--muted)] opacity-50 font-light">-</div>
-                <div className="text-[11px] font-mono text-[var(--muted)] bg-[var(--surface2)] px-2 py-0.5 rounded-md">({l.schedule_date})</div>
-                <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                  l.leave_type === 'Sick Leave' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
-                  l.leave_type === 'Half Day' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
-                  'bg-purple-500/10 border-purple-500/30 text-purple-400'
-                }`}>
-                  {l.leave_type === 'Sick Leave' ? 'Sick Leave' : l.leave_type === 'Half Day' ? 'Half Day' : 'PAL'}
-                </span>
+          <div className="divide-y divide-[var(--border)]">
+            {monthsLeaves.map((l: any) => (
+              <div key={l.id} className="px-6 py-3.5 flex justify-between items-center group hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="font-bold text-sm min-w-[3rem]">{l.employee_name}</div>
+                  <div className="text-[var(--muted)] opacity-30 font-light">-</div>
+                  <div className="text-[11px] font-medium text-[var(--muted)] bg-[var(--surface2)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
+                    ({formatDate(l.schedule_date)})
+                  </div>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                    l.leave_type === 'Sick Leave' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
+                    l.leave_type === 'Half Day' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                    'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                  }`}>
+                    {l.leave_type === 'Sick Leave' ? 'Sick Leave' : l.leave_type === 'Half Day' ? 'Half Day' : 'PAL'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {user.isAdmin && (
+                    <button onClick={() => removeLeave(l.schedule_date, l.employee_name, l.leave_type)} className="text-[var(--red)] opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/10 rounded-xl transition-all">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {user.isAdmin && (
-                  <button onClick={() => removeLeave(l.schedule_date, l.employee_name, l.leave_type)} className="text-[var(--red)] opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 rounded-lg transition-all">
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
       {showPlanner && (
