@@ -2975,16 +2975,32 @@ function LeaveView({ data, user, refresh }: any) {
     return acc;
   }, []);
 
-  const formatGroupDates = (dates: string[]) => {
-    if (dates.length === 0) return '';
+  const renderGroupDates = (dates: string[]) => {
+    if (dates.length === 0) return null;
     try {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const sorted = [...dates].sort();
       const [y, m, d] = sorted[0].split('-').map(Number);
       const monthName = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long' }).toLowerCase();
-      const dayNumbers = sorted.map(dStr => Number(dStr.split('-')[2])).sort((a,b) => a-b).join(',');
-      return `${monthName} ${dayNumbers}`;
+      
+      const dayNumbers = sorted.map((dStr, idx) => {
+        const isToday = dStr === todayStr;
+        const dayNum = Number(dStr.split('-')[2]);
+        return (
+          <span key={dStr} className={isToday ? "text-[var(--accent)] font-bold decoration-[var(--accent)]" : ""}>
+            {dayNum}{idx < sorted.length - 1 ? ',' : ''}
+          </span>
+        );
+      });
+
+      return (
+        <span className="inline-flex gap-1 items-center">
+          {monthName} {dayNumbers}
+        </span>
+      );
     } catch {
-      return dates.join(', ');
+      return <span>{dates.join(', ')}</span>;
     }
   };
 
@@ -3093,7 +3109,7 @@ function LeaveView({ data, user, refresh }: any) {
                   <div className="font-bold text-sm">{l.employee_name}</div>
                   <div className="text-[var(--muted)] opacity-30 font-light">-</div>
                   <div className="text-[11px] text-[var(--muted)]">
-                    leave date<span className="font-mono bg-[var(--surface2)] px-2 py-0.5 rounded-md border border-[var(--border)] ml-1">({formatGroupDates(l.dates)})</span>
+                    leave date<span className="font-mono bg-[var(--surface2)] px-2 py-0.5 rounded-md border border-[var(--border)] ml-1">({renderGroupDates(l.dates)})</span>
                   </div>
                   <span className={`text-[10px] font-bold uppercase tracking-wider ${
                     l.leave_type === 'Sick Leave' ? 'text-orange-400' :
