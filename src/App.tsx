@@ -1729,14 +1729,21 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     if (mode === 'dayoff') {
       return dates.filter(d => selectedWeekdays.includes(new Date(d + 'T00:00:00').getDay()));
     }
-    return includedDates;
+    
+    // Ensure includedDates are filtered by the current selected periods
+    let baseRange: string[] = [];
+    if (selectedPeriods.includes('p1')) baseRange = [...baseRange, ...dates.filter(d => Number(d.split('-')[2]) <= 15)];
+    if (selectedPeriods.includes('p2')) baseRange = [...baseRange, ...dates.filter(d => Number(d.split('-')[2]) > 15)];
+    const baseSet = new Set(baseRange);
+    
+    return includedDates.filter(d => baseSet.has(d));
   };
 
   const activeDates = getActiveDates();
 
-  // Auto-set included dates when mode, period, or employees change
+  // Auto-set included dates for shift mode
   useEffect(() => {
-    if (mode === 'shift' || mode === 'paypro') {
+    if (mode === 'shift') {
       let baseRange: string[] = [];
       if (selectedPeriods.includes('p1')) {
         baseRange = [...baseRange, ...dates.filter(d => Number(d.split('-')[2]) <= 15)];
@@ -1762,8 +1769,6 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
         return someoneCanWork;
       });
       setIncludedDates(autoSelected);
-    } else if (mode !== 'dayoff') {
-      setIncludedDates([]);
     }
   }, [mode, selectedPeriods, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]);
 
@@ -1913,7 +1918,10 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
             <span className="text-[9px] font-bold uppercase tracking-widest leading-none">Shift</span>
           </button>
           <button 
-            onClick={() => setMode('paypro')}
+            onClick={() => {
+              setMode('paypro');
+              setIncludedDates([]);
+            }}
             className={`flex flex-col items-center justify-center p-2 rounded-2xl border transition-all ${mode === 'paypro' ? 'bg-orange-500/10 border-orange-500 text-orange-400' : 'bg-gray-800/20 border-gray-700 text-gray-500 hover:border-gray-600'}`}
           >
             <Zap size={16} className="mb-0.5" />
