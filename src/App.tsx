@@ -3061,19 +3061,20 @@ function LeaveView({ data, user, refresh }: any) {
           <div className="col-span-full py-20 text-center text-[var(--muted)] border-2 border-dashed border-[var(--border)] rounded-3xl">No leave records for this month</div>
         ) : (
           monthsLeaves.map((l: any) => (
-            <div key={l.id} className="bg-[var(--surface)] border border-[var(--border)] p-4 rounded-2xl flex justify-between items-center group">
-              <div>
-                <div className="font-bold">{l.employee_name}</div>
-                <div className="text-[10px] font-mono text-[var(--muted)] mt-0.5">{l.schedule_date}</div>
-              </div>
+            <div key={l.id} className="bg-[var(--surface)] border border-[var(--border)] px-5 py-3 rounded-2xl flex justify-between items-center group">
               <div className="flex items-center gap-3">
+                <div className="font-bold text-sm">{l.employee_name}</div>
+                <div className="text-[var(--muted)] opacity-50 font-light">-</div>
+                <div className="text-[11px] font-mono text-[var(--muted)] bg-[var(--surface2)] px-2 py-0.5 rounded-md">({l.schedule_date})</div>
                 <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                   l.leave_type === 'Sick Leave' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
                   l.leave_type === 'Half Day' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
                   'bg-purple-500/10 border-purple-500/30 text-purple-400'
                 }`}>
-                  {l.leave_type === 'Sick Leave' ? 'SL' : l.leave_type === 'Half Day' ? 'HD' : 'PAL'}
+                  {l.leave_type === 'Sick Leave' ? 'Sick Leave' : l.leave_type === 'Half Day' ? 'Half Day' : 'PAL'}
                 </span>
+              </div>
+              <div className="flex items-center gap-3">
                 {user.isAdmin && (
                   <button onClick={() => removeLeave(l.schedule_date, l.employee_name, l.leave_type)} className="text-[var(--red)] opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 rounded-lg transition-all">
                     <Trash2 size={14} />
