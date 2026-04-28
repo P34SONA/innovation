@@ -20,8 +20,7 @@ import {
   Moon,
   Palette,
   PaintBucket,
-  X,
-  Sparkles
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -35,8 +34,7 @@ import {
 import { 
   getPHTTodayStr, 
   getPHTYesterdayStr, 
-  analyzeAndProjectAssignments,
-  askAIAboutTaskRotation
+  analyzeAndProjectAssignments
 } from './services/automationService';
 import type { 
   Admin, 
@@ -542,16 +540,6 @@ function AdminView({ data, user, refresh }: any) {
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const [aiStatus, setAiStatus] = useState<string | null>(null);
-  const [loadingAI, setLoadingAI] = useState(false);
-
-  const checkAI = async () => {
-    setLoadingAI(true);
-    const result = await askAIAboutTaskRotation(data.assignments);
-    setAiStatus(result);
-    setLoadingAI(false);
-  };
-
   const [historyFilter, setHistoryFilter] = useState({ from: '', to: '', task: '', emp: '' });
   const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
@@ -885,7 +873,7 @@ function AdminView({ data, user, refresh }: any) {
                   className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg)] text-[var(--accent)]"
                 />
                 <label htmlFor="autoRotate" className="text-[10px] font-bold text-[var(--text)] uppercase tracking-wider cursor-pointer">
-                  Enable Auto-Swap (Daily SDP/DELTA) for 30 Days
+                  Enable Daily SDP/DELTA Auto-Swap
                 </label>
               </div>
             )}
@@ -986,26 +974,55 @@ function AdminView({ data, user, refresh }: any) {
           tasks={data.tasks}
           assignments={data.assignments}
           currentMonth={currentMonth}
+          user={user}
           onClose={() => setShowBulkTaskModal(false)}
           onSave={async (params: any) => {
-            const { selectedEmps, taskName, startDate, endDate } = params;
+            const { selectedEmps, taskName, startDate, endDate, autoSwap } = params;
             
-            const { data: res, error } = await getSb().from('assignments').insert({
-              task_name: taskName,
-              duty_from: startDate,
-              duty_to: endDate,
-              added_by: user.name
-            }).select('id').single();
-
-            if (error) { alert(error.message); return; }
-
-            const rows = selectedEmps.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
-            const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
-            
-            if (e2) alert(e2.message);
-            else {
+            if (autoSwap && (taskName === 'SDP' || taskName === 'DELTA')) {
+              let curr = new Date(startDate + 'T00:00:00');
+              const end = new Date(endDate + 'T00:00:00');
+              let index = 0;
+              
+              while (curr <= end) {
+                const ds = formatDate(curr);
+                const currentTask = index % 2 === 0 ? taskName : (taskName === 'SDP' ? 'DELTA' : 'SDP');
+                
+                const { data: res, error } = await getSb().from('assignments').insert({
+                  task_name: currentTask,
+                  duty_from: ds,
+                  duty_to: ds,
+                  added_by: index === 0 ? user.name : `${user.name} (Auto-Swap)`
+                }).select('id').single();
+                
+                if (!error && res) {
+                  const rows = selectedEmps.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
+                  await getSb().from('assignment_employees').insert(rows);
+                }
+                
+                curr.setDate(curr.getDate() + 1);
+                index++;
+              }
               setShowBulkTaskModal(false);
               refresh();
+            } else {
+              const { data: res, error } = await getSb().from('assignments').insert({
+                task_name: taskName,
+                duty_from: startDate,
+                duty_to: endDate,
+                added_by: user.name
+              }).select('id').single();
+
+              if (error) { alert(error.message); return; }
+
+              const rows = selectedEmps.map((e: string) => ({ assignment_id: res.id, employee_name: e }));
+              const { error: e2 } = await getSb().from('assignment_employees').insert(rows);
+              
+              if (e2) alert(e2.message);
+              else {
+                setShowBulkTaskModal(false);
+                refresh();
+              }
             }
           }}
         />
@@ -1016,14 +1033,6 @@ function AdminView({ data, user, refresh }: any) {
           <h2 className="font-serif text-2xl">Assignment History</h2>
           <div className="flex items-center gap-3">
             <button 
-              onClick={checkAI}
-              disabled={loadingAI}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-500 hover:text-white transition-all shadow-lg shadow-emerald-500/5"
-            >
-              <Sparkles size={14} className={loadingAI ? "animate-pulse" : ""} />
-              {loadingAI ? 'Analyzing...' : 'Analyze Rotation Logic'}
-            </button>
-            <button 
               onClick={bulkDeleteAssignments}
               className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
             >
@@ -1032,29 +1041,6 @@ function AdminView({ data, user, refresh }: any) {
             <span className="text-[10px] font-mono bg-[var(--surface2)] px-3 py-1 rounded-full border border-[var(--border)] text-[var(--muted)]">{filteredHistory.length} records</span>
           </div>
         </div>
-
-        {aiStatus && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-6 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.1),transparent)] border border-emerald-500/20 rounded-2xl p-5 relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-2">
-              <button onClick={() => setAiStatus(null)} className="text-emerald-500/40 hover:text-emerald-500 transition-colors"><X size={14} /></button>
-            </div>
-            <div className="flex gap-4 items-start">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-                <Brain className="text-emerald-400" size={20} />
-              </div>
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase font-black tracking-[2px] text-emerald-400/60">Persona AI Analysis</div>
-                <div className="text-sm text-emerald-100/90 leading-relaxed font-medium">
-                  {aiStatus}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
         
         <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
@@ -2141,11 +2127,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   );
 }
 
-function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, currentMonth }: any) {
+function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, currentMonth, user }: any) {
   const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
   const [taskName, setTaskName] = useState('');
   const [periodType, setPeriodType] = useState<'p1' | 'p2'>('p1');
   const [search, setSearch] = useState('');
+  const [autoSwap, setAutoSwap] = useState(false);
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -2175,7 +2162,7 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
       alert('Please select task and employees');
       return;
     }
-    onSave({ selectedEmps, taskName, startDate, endDate });
+    onSave({ selectedEmps, taskName, startDate, endDate, autoSwap });
   };
 
   return (
@@ -2215,12 +2202,38 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
             <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">2. Select Task</label>
             <select 
               value={taskName} 
-              onChange={e => setTaskName(e.target.value)}
+              onChange={e => {
+                setTaskName(e.target.value);
+                if (e.target.value !== 'SDP' && e.target.value !== 'DELTA') setAutoSwap(false);
+              }}
               className="w-full bg-[#0d0f14] border border-gray-700 rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--accent)] transition-colors"
             >
               <option value="">— Choose task type —</option>
               {tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
             </select>
+
+            {(taskName === 'SDP' || taskName === 'DELTA') && (
+              <div className="mt-3 flex items-center justify-between p-3 bg-[var(--accent)]/5 border border-[var(--accent)]/10 rounded-xl">
+                <div className="space-y-0.5">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-[var(--accent)]">Auto Swap Task</div>
+                  <div className="text-[8px] text-[var(--muted)] font-bold">Daily rotation between SDP & DELTA</div>
+                </div>
+                <div className="flex bg-gray-900 p-1 rounded-lg border border-gray-800">
+                  <button 
+                    onClick={() => setAutoSwap(false)}
+                    className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all ${!autoSwap ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-500 hover:text-gray-400'}`}
+                  >
+                    Off
+                  </button>
+                  <button 
+                    onClick={() => setAutoSwap(true)}
+                    className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all ${autoSwap ? 'bg-[var(--accent)] text-black shadow-sm shadow-[var(--accent)]/20' : 'text-gray-500 hover:text-[var(--accent)]'}`}
+                  >
+                    On
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -2276,7 +2289,7 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
             onClick={handleSave} 
             className="flex-1 bg-[var(--accent)] text-black py-3 rounded-xl text-[10px] font-bold shadow-lg shadow-[var(--accent)]/10 hover:bg-[#f0d060] transition-all transform active:scale-95 uppercase tracking-wider"
           >
-            Process Bulk Task
+            Assign Employees
           </button>
         </div>
       </div>

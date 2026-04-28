@@ -1,16 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
-// Standard AI Studio way to access the key, but with a safety fallback for the browser build
-const getApiKey = () => {
-  if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
-    return process.env.GEMINI_API_KEY;
-  }
-  // @ts-ignore
-  return import.meta.env?.VITE_GEMINI_API_KEY || '';
-};
-
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
 export const getPHTDate = () => {
   // Philippine Time is UTC+8
   const d = new Date();
@@ -38,9 +25,6 @@ export async function analyzeAndProjectAssignments(
   employees: string[],
   todayStr: string
 ) {
-  // This function uses AI to identify the "Auto-Swap" pattern and ensure it's up to date
-  // We look for patterns like SDP -> DELTA or vice versa
-  
   const relevantTasks = ['SDP', 'DELTA'];
   const sdpDeltaAssignments = currentAssignments.filter(a => relevantTasks.includes(a.task));
   
@@ -61,13 +45,8 @@ export async function analyzeAndProjectAssignments(
     const lastAssignment = teamAssignments[0];
     
     if (lastAssignment.dutyTo < todayStr) {
-      // We have a gap. Determine the rotation.
-      // Use AI to confirm the cycle if it's more than just a swap, 
-      // but for now, we follow the requested swap logic.
-      
       let currDate = new Date(lastAssignment.dutyTo + 'T00:00:00');
       currDate.setDate(currDate.getDate() + 1);
-      const today = new Date(todayStr + 'T00:00:00');
       
       let lastTask = lastAssignment.task;
       
@@ -83,35 +62,10 @@ export async function analyzeAndProjectAssignments(
         lastTask = nextTask;
         currDate.setDate(currDate.getDate() + 1);
         
-        // Safety: don't project more than 7 days at a time via this automated path
         if (newAssignments.length >= 7) break;
       }
     }
   }
 
   return newAssignments;
-}
-
-export async function askAIAboutTaskRotation(history: any[]) {
-  try {
-    const prompt = `
-      Analyze the following task assignment history and identify if there is a rotation pattern (e.g. SDP swaps with DELTA daily).
-      History: ${JSON.stringify(history.slice(0, 10))}
-      
-      Current Date (PHT): ${getPHTTodayStr()}
-      
-      If you see a pattern, explain it and suggest what the next tasks should be for the current date if they are missing.
-      Return your answer in a concise way.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-
-    return response.text;
-  } catch (err) {
-    console.error("AI Analysis failed:", err);
-    return null;
-  }
 }
