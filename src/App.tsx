@@ -1393,7 +1393,6 @@ function ScheduleView({ data, user, refresh }: any) {
           }
         }
       } else if (shiftId) {
-        // Filter out dates where the employee has ANY leave/dayoff
         const rows = selectedEmps.flatMap((emp: string) => 
           datesInRange
             .filter(d => !data.leaveEntries.some((l: any) => l.employee_name === emp && l.schedule_date === d))
