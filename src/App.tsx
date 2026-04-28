@@ -1241,14 +1241,16 @@ function TaskView({ data, user }: any) {
               <div 
                 key={a.id} 
                 className={`group relative bg-[var(--surface)] border rounded-[20px] overflow-hidden transition-all hover:-translate-y-1 hover:shadow-2xl ${
-                  isToday 
+                  isToday && isMe 
                     ? 'border-[var(--accent)] shadow-[0_0_20px_rgba(234,179,8,0.15)] bg-[var(--accent)]/[0.03]' 
-                    : isMe 
-                      ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' 
-                      : 'border-[var(--border)] hover:border-[var(--accent)]'
+                    : isToday
+                      ? 'border-[var(--border)] bg-gray-800/10'
+                      : isMe 
+                        ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' 
+                        : 'border-[var(--border)] hover:border-[var(--accent)]'
                 }`}
               >
-                <div className={`p-5 border-b border-[var(--border)] flex justify-between items-start gap-4 ${isToday ? 'bg-[var(--accent)]/5' : 'bg-[var(--surface2)]'}`}>
+                <div className={`p-5 border-b border-[var(--border)] flex justify-between items-start gap-4 ${isToday && isMe ? 'bg-[var(--accent)]/5' : 'bg-[var(--surface2)]'}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="text-lg font-bold truncate">{a.task}</div>
@@ -1259,7 +1261,7 @@ function TaskView({ data, user }: any) {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-[var(--muted)]">
-                      <Calendar size={12} className={isToday ? "text-[var(--accent)]" : "text-white"} />
+                      <Calendar size={12} className={isToday && isMe ? "text-[var(--accent)]" : "text-[var(--muted)]"} />
                       {a.dutyFrom} → {a.dutyTo}
                     </div>
                   </div>
@@ -1269,7 +1271,7 @@ function TaskView({ data, user }: any) {
                       a.task === 'DELTA' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' :
                       'bg-[var(--purple)]/10 text-[var(--purple)] border border-[var(--purple)]/30'
                     }`}>{a.task}</span>
-                    {isMe && <span className="text-[9px] font-bold uppercase tracking-widest bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30 px-2 py-0.5 rounded-full">Your Task ✓</span>}
+                    {isMe && <span className="text-[9px] font-bold uppercase tracking-widest bg-[var(--accent)] text-black font-black px-2 py-0.5 rounded-full shadow-lg shadow-[var(--accent)]/20">Your Task ✓</span>}
                   </div>
                 </div>
                 <div className="p-5">
