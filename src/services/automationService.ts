@@ -1,6 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Standard AI Studio way to access the key, but with a safety fallback for the browser build
+const getApiKey = () => {
+  if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+    return process.env.GEMINI_API_KEY;
+  }
+  // @ts-ignore
+  return import.meta.env?.VITE_GEMINI_API_KEY || '';
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const getPHTDate = () => {
   // Philippine Time is UTC+8
