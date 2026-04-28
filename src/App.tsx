@@ -1698,7 +1698,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   const [leaveType, setLeaveType] = useState('Dayoff');
   const [mode, setMode] = useState<'shift' | 'paypro' | 'dayoff'>('dayoff');
   const [loading, setLoading] = useState(false);
-  const [periodType, setPeriodType] = useState<'p1' | 'p2' | 'week'>('p1');
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['p1']);
   const [selectedWeekIdx, setSelectedWeekIdx] = useState(0);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [search, setSearch] = useState('');
@@ -1734,7 +1734,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
   // Auto-set included dates when mode, period, or employees change
   useEffect(() => {
     if (mode === 'shift' || mode === 'paypro') {
-      const baseRange = periodType === 'weekly' ? (weeks[selectedWeekIdx] || []) : dates;
+      let baseRange: string[] = [];
+      if (selectedPeriods.includes('p1')) {
+        baseRange = [...baseRange, ...dates.filter(d => Number(d.split('-')[2]) <= 15)];
+      }
+      if (selectedPeriods.includes('p2')) {
+        baseRange = [...baseRange, ...dates.filter(d => Number(d.split('-')[2]) > 15)];
+      }
+      baseRange = Array.from(new Set(baseRange)).sort();
       
       // If no employees, select all in range
       if (selectedEmps.length === 0) {
@@ -1753,7 +1760,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
     } else if (mode !== 'dayoff') {
       setIncludedDates([]);
     }
-  }, [mode, periodType, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]);
+  }, [mode, selectedPeriods, selectedWeekIdx, JSON.stringify(selectedEmps), dates, weeks, leaveEntries]);
 
   const handleSave = async () => {
     if (activeDates.length === 0) {
@@ -1957,17 +1964,29 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
               <>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   <button 
-                    onClick={() => setPeriodType('p1')}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    onClick={() => {
+                      setSelectedPeriods(prev => 
+                        prev.includes('p1') 
+                          ? prev.length > 1 ? prev.filter(x => x !== 'p1') : prev
+                          : [...prev, 'p1']
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${selectedPeriods.includes('p1') ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >
-                    1–15
+                    1-15
                     {mode === 'paypro' && <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p1')}</span>}
                   </button>
                   <button 
-                    onClick={() => setPeriodType('p2')}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                    onClick={() => {
+                      setSelectedPeriods(prev => 
+                        prev.includes('p2') 
+                          ? prev.length > 1 ? prev.filter(x => x !== 'p2') : prev
+                          : [...prev, 'p2']
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-2 ${selectedPeriods.includes('p2') ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
                   >
-                    16–{daysInMonth}
+                    16-30
                     {mode === 'paypro' && <span className="bg-black/10 px-1 rounded text-[8px]">{getPeriodCount('p2')}</span>}
                   </button>
                 </div>
@@ -1975,9 +1994,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                 <div className="flex flex-wrap gap-1.5 p-3 bg-gray-900/50 rounded-2xl border border-gray-800/50">
                   {(() => {
                     let baseDates: string[] = [];
-                    if (periodType === 'p1') baseDates = dates.filter(d => Number(d.split('-')[2]) <= 15);
-                    else if (periodType === 'p2') baseDates = dates.filter(d => Number(d.split('-')[2]) > 15);
-                    else baseDates = weeks[selectedWeekIdx] || [];
+                    if (selectedPeriods.includes('p1')) baseDates = [...baseDates, ...dates.filter(d => Number(d.split('-')[2]) <= 15)];
+                    if (selectedPeriods.includes('p2')) baseDates = [...baseDates, ...dates.filter(d => Number(d.split('-')[2]) > 15)];
+                    // If somehow none, use weekly logic or show nothing
+                    if (baseDates.length === 0) baseDates = weeks[selectedWeekIdx] || [];
+                    
+                    baseDates = Array.from(new Set(baseDates)).sort();
 
                     if (baseDates.length === 0) return <div className="text-[9px] text-gray-600 italic">No days selected.</div>;
                     
@@ -2146,7 +2168,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
 function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, currentMonth, user }: any) {
   const [selectedEmps, setSelectedEmps] = useState<string[]>([]);
   const [taskName, setTaskName] = useState('');
-  const [periodType, setPeriodType] = useState<'p1' | 'p2'>('p1');
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(['p1']);
   const [search, setSearch] = useState('');
   const [autoSwap, setAutoSwap] = useState(false);
 
@@ -2154,9 +2176,12 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
   const daysInMonth = new Date(year, month, 0).getDate();
   const dates = Array.from({ length: daysInMonth }, (_, i) => `${currentMonth}-${String(i + 1).padStart(2, '0')}`);
 
-  const activeDates = periodType === 'p1' 
-    ? dates.filter(d => Number(d.split('-')[2]) <= 15)
-    : dates.filter(d => Number(d.split('-')[2]) > 15);
+  const activeDates = useMemo(() => {
+    let ad: string[] = [];
+    if (selectedPeriods.includes('p1')) ad = [...ad, ...dates.filter(d => Number(d.split('-')[2]) <= 15)];
+    if (selectedPeriods.includes('p2')) ad = [...ad, ...dates.filter(d => Number(d.split('-')[2]) > 15)];
+    return Array.from(new Set(ad)).sort();
+  }, [selectedPeriods, dates]);
 
   const startDate = activeDates[0] || '';
   const endDate = activeDates[activeDates.length - 1] || '';
@@ -2197,16 +2222,28 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
             <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">1. Select Period</label>
             <div className="flex gap-2">
               <button 
-                onClick={() => setPeriodType('p1')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${periodType === 'p1' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                onClick={() => {
+                  setSelectedPeriods(prev => 
+                    prev.includes('p1') 
+                      ? prev.length > 1 ? prev.filter(x => x !== 'p1') : prev
+                      : [...prev, 'p1']
+                  );
+                }}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${selectedPeriods.includes('p1') ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
               >
-                1st Half (1–15)
+                1-15
               </button>
               <button 
-                onClick={() => setPeriodType('p2')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${periodType === 'p2' ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+                onClick={() => {
+                  setSelectedPeriods(prev => 
+                    prev.includes('p2') 
+                      ? prev.length > 1 ? prev.filter(x => x !== 'p2') : prev
+                      : [...prev, 'p2']
+                  );
+                }}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all ${selectedPeriods.includes('p2') ? 'bg-[var(--accent)] text-black border-[var(--accent)] shadow-md' : 'bg-gray-800/40 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
               >
-                2nd Half (16–{daysInMonth})
+                16-30
               </button>
             </div>
             <div className="mt-2 p-3 bg-gray-900/50 rounded-xl border border-gray-800/50 text-[11px] text-[var(--muted)] font-mono text-center">
