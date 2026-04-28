@@ -2964,19 +2964,32 @@ function LeaveView({ data, user, refresh }: any) {
     .filter((e: any) => e.schedule_date.startsWith(currentMonth) && e.leave_type !== 'Dayoff')
     .sort((a: any, b: any) => a.schedule_date.localeCompare(b.schedule_date));
 
-  const formatDate = (dateStr: string) => {
+  // Group leaves by employee and type
+  const groupedLeaves = monthsLeaves.reduce((acc: any[], leaf: any) => {
+    const existing = acc.find(g => g.employee_name === leaf.employee_name && g.leave_type === leaf.leave_type);
+    if (existing) {
+      existing.dates.push(leaf.schedule_date);
+    } else {
+      acc.push({ ...leaf, dates: [leaf.schedule_date] });
+    }
+    return acc;
+  }, []);
+
+  const formatGroupDates = (dates: string[]) => {
+    if (dates.length === 0) return '';
     try {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      const date = new Date(y, m - 1, d);
-      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+      const sorted = [...dates].sort();
+      const [y, m, d] = sorted[0].split('-').map(Number);
+      const monthName = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long' }).toLowerCase();
+      const dayNumbers = sorted.map(dStr => Number(dStr.split('-')[2])).sort((a,b) => a-b).join(',');
+      return `${monthName} ${dayNumbers}`;
     } catch {
-      return dateStr;
+      return dates.join(', ');
     }
   };
 
   const addLeave = async () => {
     if (!empId || !fromDate || !toDate) return;
-    // Generate dates between from and to
     const dates: string[] = [];
     let curr = new Date(fromDate + 'T00:00:00');
     const end = new Date(toDate + 'T00:00:00');
@@ -2997,10 +3010,11 @@ function LeaveView({ data, user, refresh }: any) {
     else { setFromDate(''); setToDate(''); refresh(); }
   };
 
-  const removeLeave = async (date: string, emp: string, type: string) => {
+  const removeGroupLeave = async (dates: string[], emp: string, type: string) => {
     if (!user.isAdmin) return;
+    if (!confirm(`Remove ${type} for ${emp} on ${dates.length} days?`)) return;
     const { error } = await getSb().from('leave_entries').delete()
-      .eq('schedule_date', date)
+      .in('schedule_date', dates)
       .eq('employee_name', emp)
       .eq('leave_type', type);
     if (error) alert(error.message);
@@ -3051,8 +3065,8 @@ function LeaveView({ data, user, refresh }: any) {
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">Type</label>
               <select value={lType} onChange={e => setLType(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
                 <option value="Pre Approved Leave">PAL</option>
-                <option value="Sick Leave">SL</option>
-                <option value="Half Day">HD</option>
+                <option value="Sick Leave">Sick Leave</option>
+                <option value="Half Day">Half Day</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -3069,29 +3083,29 @@ function LeaveView({ data, user, refresh }: any) {
       )}
 
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-xl shadow-black/20">
-        {monthsLeaves.length === 0 ? (
+        {groupedLeaves.length === 0 ? (
           <div className="py-20 text-center text-[var(--muted)] border-2 border-dashed border-[var(--border)] m-4 rounded-2xl">No leave records for this month</div>
         ) : (
           <div className="divide-y divide-[var(--border)]">
-            {monthsLeaves.map((l: any) => (
-              <div key={l.id} className="px-6 py-3.5 flex justify-between items-center group hover:bg-white/[0.02] transition-colors">
+            {groupedLeaves.map((l: any, idx: number) => (
+              <div key={`${l.employee_name}-${l.leave_type}-${idx}`} className="px-6 py-4 flex justify-between items-center group hover:bg-white/[0.01] transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="font-bold text-sm min-w-[3rem]">{l.employee_name}</div>
+                  <div className="font-bold text-sm">{l.employee_name}</div>
                   <div className="text-[var(--muted)] opacity-30 font-light">-</div>
-                  <div className="text-[11px] font-medium text-[var(--muted)] bg-[var(--surface2)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
-                    ({formatDate(l.schedule_date)})
+                  <div className="text-[11px] text-[var(--muted)]">
+                    leave date<span className="font-mono bg-[var(--surface2)] px-2 py-0.5 rounded-md border border-[var(--border)] ml-1">({formatGroupDates(l.dates)})</span>
                   </div>
-                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                    l.leave_type === 'Sick Leave' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
-                    l.leave_type === 'Half Day' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
-                    'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                    l.leave_type === 'Sick Leave' ? 'text-orange-400' :
+                    l.leave_type === 'Half Day' ? 'text-green-400' :
+                    'text-purple-400'
                   }`}>
-                    {l.leave_type === 'Sick Leave' ? 'Sick Leave' : l.leave_type === 'Half Day' ? 'Half Day' : 'PAL'}
+                    {l.leave_type}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   {user.isAdmin && (
-                    <button onClick={() => removeLeave(l.schedule_date, l.employee_name, l.leave_type)} className="text-[var(--red)] opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/10 rounded-xl transition-all">
+                    <button onClick={() => removeGroupLeave(l.dates, l.employee_name, l.leave_type)} className="text-[var(--red)] opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/10 rounded-xl transition-all">
                       <Trash2 size={15} />
                     </button>
                   )}
