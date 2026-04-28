@@ -1749,12 +1749,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
         return;
       }
 
-      // If employees selected, exclude their day-offs/leaves
+      // If employees selected, include dates where at least ONE selected employee can work
       const autoSelected = baseRange.filter(d => {
-        const hasLeave = selectedEmps.some(emp => 
-          (leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d)
+        if (selectedEmps.length === 0) return true;
+        // Check if there is at least one employee who does NOT have a leave conflict on this date
+        const someoneCanWork = selectedEmps.some(emp => 
+          !(leaveEntries || []).some((l: any) => l.employee_name === emp && l.schedule_date === d)
         );
-        return !hasLeave;
+        return someoneCanWork;
       });
       setIncludedDates(autoSelected);
     } else if (mode !== 'dayoff') {
@@ -2010,7 +2012,14 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       const isSat = new Date(d + 'T00:00:00').getDay() === 6;
                       const isSelected = includedDates.includes(d);
                       
-                      const hasLeaveConflict = selectedEmps.some(emp => 
+                      const allSelectedHaveLeave = selectedEmps.length > 0 && selectedEmps.every(emp => 
+                        (leaveEntries || []).some((l: any) => 
+                          l.employee_name === emp && 
+                          l.schedule_date === d
+                        )
+                      );
+
+                      const someSelectedHaveLeave = selectedEmps.length > 0 && !allSelectedHaveLeave && selectedEmps.some(emp => 
                         (leaveEntries || []).some((l: any) => 
                           l.employee_name === emp && 
                           l.schedule_date === d
@@ -2029,7 +2038,7 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                       return (
                         <button 
                           key={d} 
-                          disabled={hasLeaveConflict}
+                          disabled={allSelectedHaveLeave}
                           onClick={() => {
                             setIncludedDates(prev => 
                               prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
@@ -2040,19 +2049,24 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
                               ? 'bg-[var(--accent)] border-[var(--accent)] text-black shadow-lg shadow-[var(--accent)]/20 shadow-inner' 
                               : alreadyAssignedToPayPro
                                 ? 'bg-[var(--accent)]/20 border-[var(--accent)]/40 text-[var(--accent)]'
-                                : hasLeaveConflict
+                                : allSelectedHaveLeave
                                   ? 'bg-red-500/10 border-red-500/20 text-red-500/30 cursor-not-allowed opacity-50'
-                                  : isSun 
-                                    ? 'border-red-500/30 bg-red-500/5 text-red-400' 
-                                    : isSat 
-                                      ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
-                                      : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
+                                  : someSelectedHaveLeave
+                                    ? 'border-orange-500/30 bg-orange-500/5 text-orange-400'
+                                    : isSun 
+                                      ? 'border-red-500/30 bg-red-500/5 text-red-400' 
+                                      : isSat 
+                                        ? 'border-cyan-500/30 bg-cyan-500/5 text-cyan-400' 
+                                        : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:border-gray-600'
                           }`}
                         >
                           <span className="opacity-60">{dayName}</span>
                           <span className="text-[11px]">{dateNum}</span>
                           {alreadyAssignedToPayPro && (
                             <div className="absolute -top-1 -right-1 w-2 h-2 bg-[var(--accent)] rounded-full shadow-[0_0_8px_var(--accent)]" />
+                          )}
+                          {someSelectedHaveLeave && !isSelected && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
                           )}
                         </button>
                       );
