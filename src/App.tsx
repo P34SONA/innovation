@@ -527,7 +527,6 @@ function TabButton({ active, onClick, icon, label }: any) {
 
 function AdminView({ data, user, refresh }: any) {
   const today = getTodayStr();
-  const [adminName, setAdminName] = useState('');
   const [empName, setEmpName] = useState('');
   const [taskName, setTaskName] = useState('');
   
@@ -544,13 +543,6 @@ function AdminView({ data, user, refresh }: any) {
   const [showBulkTaskModal, setShowBulkTaskModal] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
   const [autoRotate, setAutoRotate] = useState(false);
-
-  const addAdmin = async () => {
-    if (!adminName.trim()) return;
-    const { error } = await getSb().from('admins').insert({ name: adminName.trim(), added_by: user.name });
-    if (error) alert(error.message);
-    else { setAdminName(''); refresh(); }
-  };
 
   const addEmployee = async () => {
     if (!empName.trim()) return;
@@ -762,15 +754,7 @@ function AdminView({ data, user, refresh }: any) {
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <Card title="Admin Accounts">
-          <div className="flex gap-2">
-            <input 
-              value={adminName} onChange={e => setAdminName(e.target.value)} 
-              onKeyDown={e => e.key === 'Enter' && addAdmin()}
-              placeholder="New admin..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
-            />
-            <button onClick={addAdmin} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
-          </div>
-          <div className="mt-4 flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             {data.admins.map((a: string) => (
               <div key={a} className="flex items-center gap-2 bg-[var(--surface2)] px-3 py-2 rounded-lg border border-[var(--border)]">
                 <Users size={14} className="text-[var(--accent)]" />
