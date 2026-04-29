@@ -1493,16 +1493,15 @@ function ScheduleView({ data, user, refresh }: any) {
           )}
         </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-1">
-          <Calendar size={16} className="text-white ml-2" />
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)] ml-1"><ChevronLeft size={20} /></button>
-          <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-sm font-mono px-2 outline-none" />
+          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white ml-1"><ChevronLeft size={20} /></button>
+          <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-white text-sm font-mono px-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
+          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronRight size={20} /></button>
         </div>
       </div>
 
@@ -3045,16 +3044,15 @@ function LeaveView({ data, user, refresh }: any) {
           )}
         </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
-          <Calendar size={16} className="text-white ml-1" />
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
-          <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-sm font-mono px-2 outline-none" />
+          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronLeft size={20} /></button>
+          <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-white text-sm font-mono px-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
+          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronRight size={20} /></button>
         </div>
       </div>
 
