@@ -544,6 +544,12 @@ function AdminView({ data, user, refresh }: any) {
   const [currentMonth, setCurrentMonth] = useState(getMonthStr());
   const [autoRotate, setAutoRotate] = useState(false);
 
+  useEffect(() => {
+    if (dutyFrom && dutyTo && dutyFrom > dutyTo) {
+      setDutyTo(dutyFrom);
+    }
+  }, [dutyFrom, dutyTo]);
+
   const addEmployee = async () => {
     if (!empName.trim()) return;
     const { error } = await getSb().from('employees').insert({ name: empName.trim(), added_by: user.name });
@@ -584,8 +590,22 @@ function AdminView({ data, user, refresh }: any) {
         targetTo = formatDate(d);
       }
       const end = new Date(targetTo + 'T00:00:00');
-      let index = 0;
 
+      // PRE-CLEANUP: If we are assigning for a range, clear existing SDP/DELTA for these employees
+      // to allow "re-assigning" or "advance assigning" without duplicates.
+      const existingInSharedRange = data.assignments.filter((a: any) => {
+        if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
+        if (!a.employees.some((e: string) => selectedEmployees.includes(e))) return false;
+        return (dutyFrom <= a.dutyTo && targetTo >= a.dutyFrom);
+      });
+
+      if (existingInSharedRange.length > 0) {
+        const idsToDelete = existingInSharedRange.map((a: any) => a.id);
+        await getSb().from('assignment_employees').delete().in('assignment_id', idsToDelete);
+        await getSb().from('assignments').delete().in('id', idsToDelete);
+      }
+
+      let index = 0;
       while (curr <= end) {
         const ds = formatDate(curr);
         const currentTask = index % 2 === 0 ? assignTask : (assignTask === 'SDP' ? 'DELTA' : 'SDP');
@@ -675,6 +695,10 @@ function AdminView({ data, user, refresh }: any) {
       if (editingAssignment && a.id === editingAssignment.id) return false;
       if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
       if (!a.employees.includes(e)) return false;
+      
+      // Allow overriding auto-generated assignments for planning
+      if (a.addedBy && a.addedBy.includes('(Auto-Swap)')) return false;
+      
       return (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
     });
     return found ? found.task : null;
@@ -834,17 +858,11 @@ function AdminView({ data, user, refresh }: any) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty From</label>
-                <div className="relative">
-                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
-                  <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] pl-10 pr-4 py-3 text-sm outline-none" />
-                </div>
+                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty To</label>
-                <div className="relative">
-                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
-                  <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] pl-10 pr-4 py-3 text-sm outline-none" />
-                </div>
+                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
             </div>
             {(assignTask === 'SDP' || assignTask === 'DELTA') && (
@@ -1029,17 +1047,11 @@ function AdminView({ data, user, refresh }: any) {
         <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">From</label>
-            <div className="relative">
-              <Calendar size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
-              <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg pl-8 pr-3 py-2 text-xs outline-none w-36" />
-            </div>
+            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">To</label>
-            <div className="relative">
-              <Calendar size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white pointer-events-none" />
-              <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg pl-8 pr-3 py-2 text-xs outline-none w-36" />
-            </div>
+            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">Task</label>
@@ -3071,11 +3083,11 @@ function LeaveView({ data, user, refresh }: any) {
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">From</label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">To</label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <button onClick={addLeave} className="bg-[var(--accent)] text-black font-bold h-10 rounded-lg text-sm hover:bg-[#f0d060]">Add Leave</button>
           </div>
