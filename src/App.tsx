@@ -3028,19 +3028,45 @@ function LeaveView({ data, user, refresh }: any) {
     else refresh();
   };
 
+  const bulkDeletePrevious = async () => {
+    if (!user.isAdmin) return;
+    const targetMonthName = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (!confirm(`Are you sure you want to delete ALL leave records before ${targetMonthName}? This action cannot be undone.`)) return;
+    
+    // Deletes entries older than the first day of the currently viewed month
+    const firstDayStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const { error } = await getSb()
+      .from('leave_entries')
+      .delete()
+      .lt('schedule_date', firstDayStr)
+      .neq('leave_type', 'Dayoff');
+
+    if (error) alert(error.message);
+    else refresh();
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <h2 className="font-serif text-3xl">Pre-Approved Leaves</h2>
           {user.isAdmin && (
-            <button 
-              onClick={() => setShowPlanner(true)}
-              className="flex items-center gap-2 bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 px-4 py-2 rounded-xl text-sm font-bold hover:bg-[var(--accent)] hover:text-black transition-all"
-            >
-              <Calendar size={16} />
-              Yearly Planner
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowPlanner(true)}
+                className="flex items-center gap-2 bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 px-4 py-2 rounded-xl text-sm font-bold hover:bg-[var(--accent)] hover:text-black transition-all"
+              >
+                <Calendar size={16} />
+                Yearly Planner
+              </button>
+              <button
+                onClick={bulkDeletePrevious}
+                className="flex items-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/10"
+              >
+                <Trash2 size={16} />
+                Bulk Delete Previous
+              </button>
+            </div>
           )}
         </div>
         <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
