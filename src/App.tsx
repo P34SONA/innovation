@@ -691,6 +691,9 @@ function AdminView({ data, user, refresh }: any) {
 
   const getConflictedTask = (e: string) => {
     if (assignTask !== 'SDP' && assignTask !== 'DELTA') return null;
+    
+    const selMonth = dutyFrom.substring(0, 7); // YYYY-MM
+
     const found = data.assignments.find((a: any) => {
       if (editingAssignment && a.id === editingAssignment.id) return false;
       if (a.task !== 'SDP' && a.task !== 'DELTA') return false;
@@ -699,7 +702,10 @@ function AdminView({ data, user, refresh }: any) {
       // Allow overriding auto-generated assignments for planning
       if (a.addedBy && a.addedBy.includes('(Auto-Swap)')) return false;
       
-      return (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
+      const aMonth = a.dutyFrom.substring(0, 7);
+      
+      // Conflict if in the same month OR overlaps the specific date range
+      return aMonth === selMonth || (dutyFrom <= a.dutyTo && dutyTo >= a.dutyFrom);
     });
     return found ? found.task : null;
   };
