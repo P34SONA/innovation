@@ -45,13 +45,6 @@ export interface LeaveEntry {
   leave_type: string;
 }
 
-export interface SoftSkill {
-  year: number;
-  month: number;
-  row_num: number;
-  content: string;
-}
-
 export interface NoteRow {
   section_key: string;
   row_idx: number;
@@ -62,4 +55,4 @@ export interface NoteRow {
   };
 }
 
-export type AppTab = 'admin' | 'employee' | 'schedule' | 'leave' | 'skills' | 'notes';
+export type AppTab = 'admin' | 'employee' | 'schedule' | 'leave' | 'notes';

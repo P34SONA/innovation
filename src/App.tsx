@@ -4,7 +4,6 @@ import {
   ClipboardList, 
   Calendar, 
   Palmtree, 
-  Brain, 
   FileText, 
   Settings, 
   LogOut, 
@@ -322,14 +321,6 @@ export default function App() {
               label="Leaves" 
             />
           )}
-          {!user.isGuest && (
-            <TabButton 
-              active={activeTab === 'skills'} 
-              onClick={() => setActiveTab('skills')} 
-              icon={<Brain size={18} />} 
-              label="Skills" 
-            />
-          )}
           {user.isAdmin && (
             <TabButton 
               active={activeTab === 'notes'} 
@@ -354,7 +345,6 @@ export default function App() {
             {activeTab === 'employee' && <TaskView data={data} user={user} />}
             {activeTab === 'schedule' && <ScheduleView data={data} user={user} refresh={() => fetchAllData(getSb())} />}
             {activeTab === 'leave' && <LeaveView data={data} user={user} refresh={() => fetchAllData(getSb())} />}
-            {activeTab === 'skills' && <SkillsView user={user} />}
             {activeTab === 'notes' && <NotesView user={user} />}
           </motion.div>
         </AnimatePresence>
@@ -3141,83 +3131,6 @@ function LeaveView({ data, user, refresh }: any) {
           onClose={() => setShowPlanner(false)} 
         />
       )}
-    </div>
-  );
-}
-
-function SkillsView({ user }: any) {
-  const [curYear, setCurYear] = useState(new Date().getUTCFullYear());
-  const [skills, setSkills] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchSkills = async () => {
-      setLoading(true);
-      const { data } = await getSb().from('soft_skills').select('*').eq('year', curYear);
-      setSkills(data || []);
-      setLoading(false);
-    };
-    fetchSkills();
-  }, [curYear]);
-
-  const saveContent = async (month: number, row: number, content: string) => {
-    if (!user.isAdmin) return;
-    const { error } = await getSb().from('soft_skills').upsert({
-      year: curYear,
-      month,
-      row_num: row,
-      content
-    }, { onConflict: 'year,month,row_num' });
-    if (error) console.error(error);
-  };
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 text-white">
-        <h2 className="font-serif text-3xl">Soft Skills Training</h2>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
-          <Calendar size={16} className="text-white ml-1" />
-          <button onClick={() => setCurYear(y => y - 1)} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronLeft size={20} /></button>
-          <span className="flex items-center px-4 font-mono text-sm">{curYear}</span>
-          <button onClick={() => setCurYear(y => y + 1)} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-[var(--muted)]"><ChevronRight size={20} /></button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MONTH_NAMES.map((name, i) => {
-          const mIdx = i + 1;
-          const r1 = skills.find(s => s.month === mIdx && s.row_num === 1)?.content || '';
-          const r2 = skills.find(s => s.month === mIdx && s.row_num === 2)?.content || '';
-          
-          return (
-            <div key={name} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-lg">
-              <div className="bg-[var(--surface2)] px-5 py-3 border-b border-[var(--border)] font-bold text-sm tracking-wide">{name} {curYear}</div>
-              <div className="p-4 space-y-4">
-                 <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Training A</label>
-                    <textarea 
-                      defaultValue={r1}
-                      onBlur={(e) => saveContent(mIdx, 1, e.target.value)}
-                      readOnly={!user.isAdmin}
-                      placeholder={user.isAdmin ? "Input training..." : "No notes yet."}
-                      className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl p-3 text-xs min-h-[80px] outline-none focus:border-[var(--accent)] resize-none"
-                    />
-                 </div>
-                 <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Training B</label>
-                    <textarea 
-                      defaultValue={r2}
-                      onBlur={(e) => saveContent(mIdx, 2, e.target.value)}
-                      readOnly={!user.isAdmin}
-                      placeholder={user.isAdmin ? "Input training..." : "No notes yet."}
-                      className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl p-3 text-xs min-h-[80px] outline-none focus:border-[var(--accent)] resize-none"
-                    />
-                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
