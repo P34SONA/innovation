@@ -2631,12 +2631,12 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
               return (
                 <button 
                   key={item}
-                  disabled={!!conflictTask}
+                  disabled={!!conflictTask && conflictTask !== 'SDP' && conflictTask !== 'DELTA'}
                   onClick={() => selected.includes(item) ? setSelected(selected.filter(x => x !== item)) : setSelected([...selected, item])}
                   className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
                     selected.includes(item) 
                       ? 'bg-[var(--accent)] text-black border-[var(--accent)] font-bold' 
-                      : conflictTask 
+                      : (conflictTask && conflictTask !== 'SDP' && conflictTask !== 'DELTA')
                         ? 'bg-[var(--red)]/5 border-[var(--red)]/20 text-[var(--red)]/40 cursor-not-allowed'
                         : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--muted)] hover:border-[var(--muted)]'
                   }`}
