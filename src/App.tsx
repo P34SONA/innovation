@@ -368,8 +368,8 @@ function ConfigScreen({ onSave }: { onSave: (cfg: { url: string; key: string }) 
   const [key, setKey] = useState('');
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_30%_50%,#1a1f2e_0%,#0d0f14_70%)] px-4">
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-2xl sm:p-10">
+    <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_30%_50%,#1a1f2e_0%,#030406_70%)] px-4">
+      <div className="relative z-10 w-full max-w-md glass-morphism p-8 shadow-2xl sm:p-10">
         <div className="font-serif text-2xl text-[var(--accent)] sm:text-3xl">HD Management System</div>
         <div className="mb-8 mt-2 text-xs leading-relaxed text-[var(--muted)] sm:text-sm">Connect your Supabase project to get started.</div>
         
@@ -421,8 +421,8 @@ function LoginScreen({ admins, employees, onLogin, onResetConfig }: any) {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_30%_50%,#1a1f2e_0%,#0d0f14_70%)] px-4">
-      <div className="relative z-10 w-full max-w-[420px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10 shadow-2xl sm:p-12">
+    <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_30%_50%,#1a1f2e_0%,#030406_70%)] px-4">
+      <div className="relative z-10 w-full max-w-[420px] glass-morphism p-10 shadow-2xl sm:p-12">
         <div className="font-serif text-3xl text-[var(--accent)]">Sign In</div>
         <div className="mb-8 mt-2 text-sm text-[var(--muted)]">Enter your name to manage or view tasks</div>
         
@@ -471,7 +471,7 @@ function LoginScreen({ admins, employees, onLogin, onResetConfig }: any) {
 
 function Topbar({ user, onLogout }: any) {
   return (
-    <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-8">
+    <div className="flex items-center justify-between border-b border-white/[0.05] bg-white/[0.02] backdrop-blur-md px-4 py-3 sm:px-8 sticky top-0 z-[60]">
       <div className="font-serif text-xl text-[var(--accent)]">System Overview</div>
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="hidden items-center gap-2 text-xs text-[var(--muted)] sm:flex">
@@ -1040,26 +1040,26 @@ function AdminView({ data, user, refresh }: any) {
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-4 items-end bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-4">
+        <div className="flex flex-wrap gap-4 items-end glass p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">From</label>
-            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
+            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">To</label>
-            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
+            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">Task</label>
-            <select value={historyFilter.task} onChange={e => setHistoryFilter({...historyFilter, task: e.target.value})} className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36">
+            <select value={historyFilter.task} onChange={e => setHistoryFilter({...historyFilter, task: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36">
               <option value="">All</option>
               {data.tasks.map((t: any) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <button onClick={() => setHistoryFilter({from:'', to:'', task:'', emp:''})} className="bg-[var(--surface2)] border border-[var(--border)] px-4 py-2 rounded-lg text-xs font-bold hover:border-[var(--muted)]">Clear</button>
+          <button onClick={() => setHistoryFilter({from:'', to:'', task:'', emp:''})} className="bg-white/10 border border-[var(--border)] px-4 py-2 rounded-lg text-xs font-bold hover:border-[var(--muted)]">Clear</button>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <div className="overflow-x-auto glass-morphism shadow-2xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[var(--surface2)] text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] border-b border-[var(--border)]">
@@ -1149,7 +1149,7 @@ function AdminView({ data, user, refresh }: any) {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6">
+    <div className="glass-morphism p-6">
       <div className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)] mb-5">{title}</div>
       {children}
     </div>
@@ -1201,16 +1201,16 @@ function TaskView({ data, user }: any) {
         <p className="text-[var(--muted)]">All task assignments across the team.</p>
       </div>
 
-      <div className="flex gap-2 mb-8 bg-[var(--surface)] p-1 rounded-xl border border-[var(--border)] w-fit">
+      <div className="flex gap-2 mb-8 glass p-1 rounded-2xl border border-[var(--border)] w-fit">
         <button 
           onClick={() => setFilter('current')}
-          className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'current' ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${filter === 'current' ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
         >
           ✨ Today's Task
         </button>
         <button 
           onClick={() => setFilter('history')}
-          className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'history' ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${filter === 'history' ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
         >
           🕓 Previous Tasks
         </button>
@@ -1232,17 +1232,17 @@ function TaskView({ data, user }: any) {
             return (
               <div 
                 key={a.id} 
-                className={`group relative bg-[var(--surface)] border rounded-[20px] overflow-hidden transition-all hover:-translate-y-1 hover:shadow-2xl ${
+                className={`group relative glass rounded-[24px] sm:rounded-[32px] overflow-hidden transition-all hover:-translate-y-1 hover:shadow-2xl ${
                   isToday && isMe 
-                    ? 'border-[var(--accent)] shadow-[0_0_20px_rgba(234,179,8,0.15)] bg-[var(--accent)]/[0.03]' 
+                    ? 'border-[var(--accent)]/50 shadow-[0_0_40px_rgba(234,179,8,0.2)] bg-[var(--accent)]/[0.05]' 
                     : isToday
-                      ? 'border-[var(--border)] bg-gray-800/10'
+                      ? 'border-[var(--border-bright)] bg-white/[0.02]'
                       : isMe 
-                        ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' 
-                        : 'border-[var(--border)] hover:border-[var(--accent)]'
+                        ? 'border-[var(--accent)]/30 bg-[var(--accent)]/[0.03]' 
+                        : 'border-[var(--border)] hover:border-[var(--border-bright)]'
                 }`}
               >
-                <div className={`p-5 border-b border-[var(--border)] flex justify-between items-start gap-4 ${isToday && isMe ? 'bg-[var(--accent)]/5' : 'bg-[var(--surface2)]'}`}>
+                <div className={`p-5 border-b border-[var(--border)] flex justify-between items-start gap-4 ${isToday && isMe ? 'bg-[var(--accent)]/[0.08]' : 'bg-white/[0.02]'}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="text-lg font-bold truncate">{a.task}</div>
@@ -1492,26 +1492,26 @@ function ScheduleView({ data, user, refresh }: any) {
             </div>
           )}
         </div>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-1">
+        <div className="flex glass border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-1">
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white ml-1"><ChevronLeft size={20} /></button>
+          }} className="p-2 hover:bg-white/10 rounded-lg text-white ml-1"><ChevronLeft size={20} /></button>
           <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-white text-sm font-mono px-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronRight size={20} /></button>
+          }} className="p-2 hover:bg-white/10 rounded-lg text-white"><ChevronRight size={20} /></button>
         </div>
       </div>
 
       <div className="space-y-12">
         {weeks.map((week, wi) => (
-          <div key={wi} className="space-y-2">
+          <div key={wi} className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] bg-[var(--surface2)] px-3 py-1 rounded-full border border-[var(--border)]">Week {wi + 1}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] glass-bright px-3 py-1 rounded-full border border-white/5">Week {wi + 1}</span>
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+            <div className="overflow-x-auto glass-morphism shadow-2xl">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-[var(--surface2)] text-left">
@@ -3069,33 +3069,33 @@ function LeaveView({ data, user, refresh }: any) {
             </div>
           )}
         </div>
-        <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
+        <div className="flex glass border border-[var(--border)] rounded-xl p-1 gap-1 items-center px-2">
           <button onClick={() => {
             const d = new Date(year, month - 2, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronLeft size={20} /></button>
+          }} className="p-2 hover:bg-white/10 rounded-lg text-white"><ChevronLeft size={20} /></button>
           <input type="month" value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="bg-transparent text-white text-sm font-mono px-2 outline-none [&::-webkit-calendar-picker-indicator]:invert" />
           <button onClick={() => {
             const d = new Date(year, month, 1);
             setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-          }} className="p-2 hover:bg-[var(--surface2)] rounded-lg text-white"><ChevronRight size={20} /></button>
+          }} className="p-2 hover:bg-white/10 rounded-lg text-white"><ChevronRight size={20} /></button>
         </div>
       </div>
 
       {user.isAdmin && (
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6">
+        <div className="glass-morphism p-6">
           <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)] mb-5">➕ Add Leave Record</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">Employee</label>
-              <select value={empId} onChange={e => setEmpId(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
+              <select value={empId} onChange={e => setEmpId(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
                 <option value="">Select...</option>
                 {data.employees.map((e: string) => <option key={e} value={e}>{e}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">Type</label>
-              <select value={lType} onChange={e => setLType(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
+              <select value={lType} onChange={e => setLType(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
                 <option value="Pre Approved Leave">PAL</option>
                 <option value="Sick Leave">Sick Leave</option>
                 <option value="Half Day">Half Day</option>
@@ -3103,22 +3103,22 @@ function LeaveView({ data, user, refresh }: any) {
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">From</label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">To</label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <button onClick={addLeave} className="bg-[var(--accent)] text-black font-bold h-10 rounded-lg text-sm hover:bg-[#f0d060]">Add Leave</button>
           </div>
         </div>
       )}
 
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl overflow-hidden shadow-xl shadow-black/20">
+      <div className="glass-morphism shadow-xl shadow-black/20">
         {groupedLeaves.length === 0 ? (
-          <div className="py-20 text-center text-[var(--muted)] border-2 border-dashed border-[var(--border)] m-4 rounded-2xl">No leave records for this month</div>
+          <div className="py-20 text-center text-[var(--muted)] border-2 border-dashed border-white/5 m-4 rounded-2xl">No leave records for this month</div>
         ) : (
-          <div className="divide-y divide-[var(--border)]">
+          <div className="divide-y divide-white/5">
             {groupedLeaves.map((l: any, idx: number) => (
               <div key={`${l.employee_name}-${l.leave_type}-${idx}`} className="px-6 py-4 flex justify-between items-center group hover:bg-white/[0.01] transition-colors">
                 <div className="flex items-center gap-3">

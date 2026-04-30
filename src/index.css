@@ -3,31 +3,48 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg: #0d0f14;
-  --surface: #161820;
-  --surface2: #1e2028;
-  --border: #2a2d3a;
-  --accent: #e8c547;
+  --bg: #030406;
+  --surface: rgba(22, 24, 32, 0.7);
+  --surface2: rgba(30, 32, 40, 0.5);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.15);
+  --accent: #f5d142;
   --accent2: #4fd1c5;
-  --text: #eef0f6;
-  --muted: #7a7f94;
-  --red: #f87171;
+  --text: #ffffff;
+  --muted: #8d94a5;
+  --red: #ff5f5f;
   --green: #4ade80;
   --purple: #a78bfa;
-  --radius: 12px;
+  --radius: 16px;
+  --radius-lg: 24px;
 }
 
 body {
-  background-color: var(--bg);
+  background: radial-gradient(circle at 50% -20%, #1a1f2e 0%, #030406 100%);
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
   min-height: 100vh;
 }
 
-.font-serif {
-  font-family: 'DM Serif Display', serif;
+@theme {
+  --font-serif: "DM Serif Display", serif;
+  --font-mono: "DM Mono", monospace;
+  --font-sans: "DM Sans", sans-serif;
 }
 
-.font-mono {
-  font-family: 'DM Mono', monospace;
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.glass-bright {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-bright);
+}
+
+.glass-morphism {
+  @apply glass rounded-2xl sm:rounded-3xl overflow-hidden;
 }
