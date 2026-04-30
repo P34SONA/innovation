@@ -48,3 +48,13 @@ body {
 @utility glass-morphism {
   @apply glass rounded-2xl sm:rounded-3xl overflow-hidden;
 }
+
+select option {
+  background-color: #1a1f2e;
+  color: white;
+}
+
+select:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}

@@ -845,20 +845,21 @@ function AdminView({ data, user, refresh }: any) {
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Select Task</label>
               <select 
                 value={assignTask} onChange={e => setAssignTask(e.target.value)}
-                className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+                className="w-full bg-white/[0.07] border border-white/10 rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)] transition-all cursor-pointer appearance-none shadow-sm"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.25em' }}
               >
-                <option value="">Choose task...</option>
-                {data.tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                <option value="" className="bg-[#1a1f2e]">Choose task...</option>
+                {data.tasks.map((t: string) => <option key={t} value={t} className="bg-[#1a1f2e]">{t}</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty From</label>
-                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-white/[0.07] border border-white/10 rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty To</label>
-                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-white/[0.07] border border-white/10 rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
             </div>
             {(assignTask === 'SDP' || assignTask === 'DELTA') && (
@@ -1043,17 +1044,21 @@ function AdminView({ data, user, refresh }: any) {
         <div className="flex flex-wrap gap-4 items-end glass p-4 rounded-xl border border-[var(--border)] mb-4">
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">From</label>
-            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
+            <input type="date" value={historyFilter.from} onChange={e => setHistoryFilter({...historyFilter, from: e.target.value})} className="bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-xs outline-none w-36 focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">To</label>
-            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36 [&::-webkit-calendar-picker-indicator]:invert" />
+            <input type="date" value={historyFilter.to} onChange={e => setHistoryFilter({...historyFilter, to: e.target.value})} className="bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-xs outline-none w-36 focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-[var(--muted)]">Task</label>
-            <select value={historyFilter.task} onChange={e => setHistoryFilter({...historyFilter, task: e.target.value})} className="bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-xs outline-none w-36">
-              <option value="">All</option>
-              {data.tasks.map((t: any) => <option key={t} value={t}>{t}</option>)}
+            <select 
+              value={historyFilter.task} onChange={e => setHistoryFilter({...historyFilter, task: e.target.value})} 
+              className="bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-xs outline-none w-36 transition-all cursor-pointer appearance-none"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1em' }}
+            >
+              <option value="" className="bg-[#1a1f2e]">All Tasks</option>
+              {data.tasks.map((t: any) => <option key={t} value={t} className="bg-[#1a1f2e]">{t}</option>)}
             </select>
           </div>
           <button onClick={() => setHistoryFilter({from:'', to:'', task:'', emp:''})} className="bg-white/10 border border-[var(--border)] px-4 py-2 rounded-lg text-xs font-bold hover:border-[var(--muted)]">Clear</button>
@@ -2085,11 +2090,12 @@ function BulkAssignModal({ employees, shiftTypes, onClose, onSave, assignments, 
               <select 
                 value={shiftId} 
                 onChange={e => setShiftId(e.target.value)}
-                className="w-full bg-[#0d0f14] border border-gray-700 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-[var(--accent)] transition-colors"
+                className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-[var(--accent)] transition-all cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 0.8rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.1em' }}
               >
-                <option value="">— Choose shift —</option>
+                <option value="" className="bg-[#1a1f2e]">— Choose shift —</option>
                 {shiftTypes.filter((st:any) => st.name !== 'PayPro & Batch Upload').map((st: any) => (
-                  <option key={st.id} value={st.id}>{st.name}</option>
+                  <option key={st.id} value={st.id} className="bg-[#1a1f2e]">{st.name}</option>
                 ))}
               </select>
             </div>
@@ -2275,10 +2281,11 @@ function BulkTaskAssignModal({ employees, tasks, assignments, onClose, onSave, c
                 setTaskName(e.target.value);
                 if (e.target.value !== 'SDP' && e.target.value !== 'DELTA') setAutoSwap(false);
               }}
-              className="w-full bg-[#0d0f14] border border-gray-700 rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--accent)] transition-colors"
+              className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 text-xs outline-none focus:border-[var(--accent)] transition-all cursor-pointer appearance-none"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.25em' }}
             >
-              <option value="">— Choose task type —</option>
-              {tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
+              <option value="" className="bg-[#1a1f2e]">— Choose task type —</option>
+              {tasks.map((t: string) => <option key={t} value={t} className="bg-[#1a1f2e]">{t}</option>)}
             </select>
 
             {(taskName === 'SDP' || taskName === 'DELTA') && (
@@ -2782,10 +2789,11 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
               <select 
                 value={selectedEmp} 
                 onChange={e => setSelectedEmp(e.target.value)}
-                className="w-full bg-[#20232d] border border-[var(--border)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all"
+                className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.2em' }}
               >
-                <option value="">Select Employee...</option>
-                {data.employees.map((e: string) => <option key={e} value={e}>{e}</option>)}
+                <option value="" className="bg-[#1a1f2e]">Select Employee...</option>
+                {data.employees.map((e: string) => <option key={e} value={e} className="bg-[#1a1f2e]">{e}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
@@ -2793,9 +2801,10 @@ function YearlyLeavePlannerModal({ data, user, refresh, onClose }: any) {
               <select 
                 value={selectedYear} 
                 onChange={e => setSelectedYear(Number(e.target.value))}
-                className="w-full bg-[#20232d] border border-[var(--border)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all"
+                className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-[var(--accent)] transition-all cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.2em' }}
               >
-                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y} className="bg-[#1a1f2e]">{y}</option>)}
               </select>
             </div>
           </div>
@@ -3088,26 +3097,34 @@ function LeaveView({ data, user, refresh }: any) {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">Employee</label>
-              <select value={empId} onChange={e => setEmpId(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="">Select...</option>
-                {data.employees.map((e: string) => <option key={e} value={e}>{e}</option>)}
+              <select 
+                value={empId} onChange={e => setEmpId(e.target.value)} 
+                className="w-full bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none transition-all cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1em' }}
+              >
+                <option value="" className="bg-[#1a1f2e]">Select...</option>
+                {data.employees.map((e: string) => <option key={e} value={e} className="bg-[#1a1f2e]">{e}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">Type</label>
-              <select value={lType} onChange={e => setLType(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="Pre Approved Leave">PAL</option>
-                <option value="Sick Leave">Sick Leave</option>
-                <option value="Half Day">Half Day</option>
+              <select 
+                value={lType} onChange={e => setLType(e.target.value)} 
+                className="w-full bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none transition-all cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'rgba(255,255,255,0.4)\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundPosition: 'right 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1em' }}
+              >
+                <option value="Pre Approved Leave" className="bg-[#1a1f2e]">PAL</option>
+                <option value="Sick Leave" className="bg-[#1a1f2e]">Sick Leave</option>
+                <option value="Half Day" className="bg-[#1a1f2e]">Half Day</option>
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">From</label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-full bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-[var(--muted)] uppercase">To</label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-full bg-white/[0.07] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)] transition-all [&::-webkit-calendar-picker-indicator]:invert" />
             </div>
             <button onClick={addLeave} className="bg-[var(--accent)] text-black font-bold h-10 rounded-lg text-sm hover:bg-[#f0d060]">Add Leave</button>
           </div>
