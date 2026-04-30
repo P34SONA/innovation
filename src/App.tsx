@@ -289,7 +289,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Topbar user={user} onLogout={handleLogout} />
-      <div className="sticky top-0 z-50 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-8">
+      <div className="sticky top-0 z-50 overflow-x-auto border-b border-white/5 glass px-4 sm:px-8">
         <div className="flex h-14 items-center gap-2">
           {user.isAdmin && (
             <TabButton 
@@ -789,7 +789,7 @@ function AdminView({ data, user, refresh }: any) {
             <input 
               value={empName} onChange={e => setEmpName(e.target.value)} 
               onKeyDown={e => e.key === 'Enter' && addEmployee()}
-              placeholder="New employee..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
+              placeholder="New employee..." className="flex-1 bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
             />
             <button onClick={addEmployee} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
           </div>
@@ -807,7 +807,7 @@ function AdminView({ data, user, refresh }: any) {
             <input 
               value={taskName} onChange={e => setTaskName(e.target.value)} 
               onKeyDown={e => e.key === 'Enter' && addTaskType()}
-              placeholder="Task name..." className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
+              placeholder="Task name..." className="flex-1 bg-white/5 border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" 
             />
             <button onClick={addTaskType} className="bg-[var(--accent)] text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#f0d060]"><Plus size={16} /></button>
           </div>
@@ -819,7 +819,7 @@ function AdminView({ data, user, refresh }: any) {
         </Card>
       </div>
 
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 sm:p-8">
+      <div className="glass-morphism p-6 sm:p-8">
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="font-serif text-2xl mb-1">{editingAssignment ? 'Edit Assignment' : 'Assign Task'}</h2>
@@ -845,7 +845,7 @@ function AdminView({ data, user, refresh }: any) {
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Select Task</label>
               <select 
                 value={assignTask} onChange={e => setAssignTask(e.target.value)}
-                className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+                className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
               >
                 <option value="">Choose task...</option>
                 {data.tasks.map((t: string) => <option key={t} value={t}>{t}</option>)}
@@ -854,11 +854,11 @@ function AdminView({ data, user, refresh }: any) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty From</label>
-                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+                <input type="date" value={dutyFrom} onChange={e => setDutyFrom(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">Duty To</label>
-                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
+                <input type="date" value={dutyTo} onChange={e => setDutyTo(e.target.value)} className="w-full bg-white/5 border border-[var(--border)] rounded-[var(--radius)] px-4 py-3 text-sm outline-none [&::-webkit-calendar-picker-indicator]:invert" />
               </div>
             </div>
             {(assignTask === 'SDP' || assignTask === 'DELTA') && (
@@ -885,10 +885,10 @@ function AdminView({ data, user, refresh }: any) {
                 placeholder="Search employees..."
                 value={employeeSearch}
                 onChange={e => setEmployeeSearch(e.target.value)}
-                className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+                className="w-full bg-white/5 border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
               />
             </div>
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-xl bg-[var(--bg)] flex-1">
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-[var(--border)] rounded-xl bg-white/5 flex-1">
               {data.employees
                 .filter((e: string) => e.toLowerCase().includes(employeeSearch.toLowerCase()))
                 .map((e: string) => {
@@ -925,13 +925,13 @@ function AdminView({ data, user, refresh }: any) {
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-md shadow-2xl">
+          <div className="bg-black/80 backdrop-blur-xl p-8 w-full max-w-md glass-morphism border-white/10 shadow-3xl">
             <h3 className="font-serif text-2xl mb-2">Confirm Assignment</h3>
             <p className="text-sm text-[var(--muted)] mb-8">
               Are you sure you want to {editingAssignment ? 'update this' : 'create this new'} assignment?
             </p>
             
-            <div className="bg-[var(--bg)] p-4 rounded-2xl border border-[var(--border)] mb-8 space-y-3">
+            <div className="bg-white/5 p-4 rounded-2xl border border-[var(--border)] mb-8 space-y-3 glass">
               <div className="flex justify-between text-xs">
                 <span className="text-[var(--muted)]">Task:</span>
                 <span className="font-bold text-[var(--accent)]">{assignTask}</span>
@@ -1580,8 +1580,8 @@ function ScheduleView({ data, user, refresh }: any) {
                       </tr>
                     );
                   })}
-                  <tr className="bg-[var(--surface)]">
-                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Day Off</td>
+                  <tr className="bg-white/[0.02]">
+                    <td className="px-4 py-3 bg-white/[0.05] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Day Off</td>
                     {week.map(d => {
                       const doCat = { text: 'text-[#f9a8d4]', bg: 'bg-[#f9a8d4]/15', border: 'border-[#f9a8d4]/40' };
                       return (
@@ -1609,8 +1609,8 @@ function ScheduleView({ data, user, refresh }: any) {
                       );
                     })}
                   </tr>
-                  <tr className="bg-[var(--surface)]">
-                    <td className="px-4 py-3 bg-[var(--surface2)] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Pre-Approved Leave</td>
+                  <tr className="bg-white/[0.02]">
+                    <td className="px-4 py-3 bg-white/[0.05] border-r border-[var(--border)] text-xs font-bold text-[var(--text)]">Pre-Approved Leave</td>
                     {week.map(d => {
                       const palCat = { text: 'text-[#c084fc]', bg: 'bg-[#c084fc]/15', border: 'border-[#c084fc]/40' };
                       return (
@@ -2607,7 +2607,7 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+      <div className="bg-black/80 backdrop-blur-xl p-6 sm:p-8 w-full max-w-md glass-morphism border-white/10 shadow-3xl">
         <h3 className="font-serif text-2xl mb-1">{title}</h3>
         <p className="text-sm text-[var(--muted)] mb-6">{date}</p>
         
@@ -2617,7 +2617,7 @@ function SelectionModal({ title, date, items, selected: initialSelected, onClose
             placeholder="Search employees..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
+            className="w-full bg-white/5 border border-[var(--border)] rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)]"
           />
         </div>
 
@@ -3240,13 +3240,13 @@ function SpreadsheetPanel({ section, user }: any) {
   };
 
   if (loading) return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl h-[500px] flex items-center justify-center">
+    <div className="glass-morphism h-[500px] flex items-center justify-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent)]"></div>
     </div>
   );
 
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+    <div className="glass-morphism shadow-2xl flex flex-col h-[600px]">
       <div className="bg-[var(--surface2)]/50 px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="p-2 bg-[var(--accent)]/10 rounded-lg text-[var(--accent)]">

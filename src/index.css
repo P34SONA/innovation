@@ -32,19 +32,19 @@ body {
   --font-sans: "DM Sans", sans-serif;
 }
 
-.glass {
+@utility glass {
   background: var(--surface);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
-.glass-bright {
+@utility glass-bright {
   background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border-bright);
 }
 
-.glass-morphism {
+@utility glass-morphism {
   @apply glass rounded-2xl sm:rounded-3xl overflow-hidden;
 }
